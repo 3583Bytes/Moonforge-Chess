@@ -1,5 +1,0 @@
-﻿
-To Publish For Native OSX or Win10
-
-dotnet publish -c Release -r osx.10.11-x64
-dotnet publish -c Release -r win10-x64

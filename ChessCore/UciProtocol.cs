@@ -245,22 +245,42 @@ namespace ChessCore
 
         private void EmitInfo(long elapsedMs)
         {
-            // Engine score is from White's POV. UCI expects it from the searching side's POV,
-            // which is the side that just moved — i.e. the opposite of WhoseMove after the move.
-            int score = _engine.GetScore();
-            if (_engine.WhoseMove == ChessPieceColor.White) score = -score;
+            // SearchScore is the alpha returned by the root search, already from the
+            // searching side's POV in centipawns — exactly what UCI expects.
+            int score = _engine.SearchScore;
 
             long nodes = (long)_engine.NodesSearched + _engine.NodesQuiessence;
             long nps = elapsedMs > 0 ? (nodes * 1000L) / elapsedMs : 0;
 
+            // Mate scores in Search.cs are encoded as ±(32767 + remaining_depth), so a
+            // larger absolute value means a shorter mate. Convert to UCI's "mate N" (N
+            // full moves to mate) by counting plies from the score magnitude.
             string scoreField;
-            if (score >= 30_000)      scoreField = "mate 1";
-            else if (score <= -30_000) scoreField = "mate -1";
-            else                      scoreField = "cp " + score;
+            if (score >= 32767)
+            {
+                int pliesToMate = Math.Max(1, score - 32767);
+                int movesToMate = (pliesToMate + 1) / 2;
+                scoreField = "mate " + movesToMate;
+            }
+            else if (score <= -32767)
+            {
+                int pliesToMate = Math.Max(1, -score - 32767);
+                int movesToMate = (pliesToMate + 1) / 2;
+                scoreField = "mate -" + movesToMate;
+            }
+            else
+            {
+                scoreField = "cp " + score;
+            }
+
+            // PV from the search (space-separated long-algebraic moves like "e2e4 e7e5 ...").
+            // Empty when a book move was played — that's expected and UCI-legal.
+            string pv = _engine.PvLine ?? "";
+            string pvField = pv.Length > 0 ? " pv " + pv : "";
 
             Send(string.Format(CultureInfo.InvariantCulture,
-                "info depth {0} score {1} nodes {2} nps {3} time {4}",
-                _engine.PlyDepthReached, scoreField, nodes, nps, elapsedMs));
+                "info depth {0} score {1} nodes {2} nps {3} time {4}{5}",
+                _engine.PlyDepthReached, scoreField, nodes, nps, elapsedMs, pvField));
         }
 
         private static bool LooksLikeMove(string s)

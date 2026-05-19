@@ -44,4 +44,7 @@ desktop.ini
 # Local Claude / Agent context files (not for the public repo)
 CLAUDE.md
 AGENT.md
-_h2h.py
+# Test Files
+*.py
+*.ps1
+*.pgn

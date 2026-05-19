@@ -49,13 +49,13 @@ namespace ChessEngine.Engine
 
        
 
-        internal static MoveContent IterativeSearch(Board examineBoard, byte depth, ref int nodesSearched, ref int nodesQuiessence, ref string pvLine, ref byte plyDepthReached, ref byte rootMovesSearched, List<OpeningMove> currentGameBook)
+        internal static MoveContent IterativeSearch(Board examineBoard, byte depth, ref int nodesSearched, ref int nodesQuiessence, ref string pvLine, ref byte plyDepthReached, ref byte rootMovesSearched, List<OpeningMove> currentGameBook, out int searchScore)
         {
             List<Position> pvChild = new List<Position>();
             int alpha = -400000000;
             const int beta = 400000000;
-			
-            
+            searchScore = 0;
+
             MoveContent bestMove = new MoveContent();
 
             //We are going to store our result boards here           
@@ -66,6 +66,7 @@ namespace ChessEngine.Engine
             if (rootMovesSearched == 1)
             {
                 //I only have one move
+                searchScore = succ.Positions[0].Score;
                 return succ.Positions[0].LastMove;
             }
 
@@ -76,6 +77,7 @@ namespace ChessEngine.Engine
 
                 if (value >= 32767)
                 {
+                    searchScore = value;
                     return pos.LastMove;
                 }
             }
@@ -137,7 +139,8 @@ namespace ChessEngine.Engine
 
             plyDepthReached++;
 			progress=100;
-		
+
+            searchScore = alpha;
             return bestMove;
         }
 

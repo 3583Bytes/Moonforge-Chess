@@ -62,6 +62,11 @@ namespace ChessEngine.Engine // Reverted to original namespace
         public byte PlyDepthSearched;
         public byte PlyDepthReached;
         public byte RootMovesSearched;
+        // SearchScore is the alpha returned by the root search, from the searching
+        // side's POV in centipawns. This is what UCI consumers (Cute Chess, Arena)
+        // expect as the move's evaluation — distinct from ChessBoard.Score which is
+        // a static eval of the post-move position.
+        public int SearchScore;
 
         public TimeSettings GameTimeSettings;
 
@@ -961,6 +966,8 @@ namespace ChessEngine.Engine // Reverted to original namespace
 		
             NodesSearched = 0;
             NodesQuiessence = 0;
+            SearchScore = 0;
+            pvLine = "";
 			
 			var resultBoards = new ResultBoards();
             resultBoards.Positions = new List<Board>();
@@ -980,7 +987,7 @@ namespace ChessEngine.Engine // Reverted to original namespace
                 if (FindPlayBookMove(ref bestMove, ChessBoard, CurrentGameBook) == false ||
                     ChessBoard.HalfMoveClock > 90 || ChessBoard.RepeatedMove >= 2)
                 {
-					bestMove = Search.IterativeSearch(ChessBoard, PlyDepthSearched, ref NodesSearched, ref NodesQuiessence, ref pvLine, ref PlyDepthReached, ref RootMovesSearched, CurrentGameBook);
+					bestMove = Search.IterativeSearch(ChessBoard, PlyDepthSearched, ref NodesSearched, ref NodesQuiessence, ref pvLine, ref PlyDepthReached, ref RootMovesSearched, CurrentGameBook, out SearchScore);
                 }
             }
  
