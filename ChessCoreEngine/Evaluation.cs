@@ -67,7 +67,7 @@ namespace ChessEngine.Engine
             -50,-30,-30,-30,-30,-30,-30,-50
         };
 
-        private static int EvaluatePieceScore(Square square, byte position, bool endGamePhase,
+        private static int EvaluatePieceScore(Board board, Square square, byte position, bool endGamePhase,
                                                 ref byte knightCount, ref byte bishopCount, ref bool insufficientMaterial)
         {
             int score = 0;
@@ -112,6 +112,10 @@ namespace ChessEngine.Engine
 
                 //Calculate Position Values
                 score += PawnTable[index];
+
+                // Pawn chain: small bonus if defended by a friendly pawn on an adjacent
+                // file (one rank back). Pawns in a chain are hard to attack.
+                score += PawnChainBonus(board, position, square.Piece.PieceColor);
 
                 if (square.Piece.PieceColor == ChessPieceColor.White)
                 {
@@ -327,7 +331,7 @@ namespace ChessEngine.Engine
 
                 if (square.Piece.PieceColor == ChessPieceColor.White)
                 {
-                    board.Score += EvaluatePieceScore(square, x, board.EndGamePhase,
+                    board.Score += EvaluatePieceScore(board, square, x, board.EndGamePhase,
                         ref whiteKnightCount, ref whiteBishopCount, ref insufficientMaterial);
 
                     if (square.Piece.PieceType == ChessPieceType.King)
@@ -352,7 +356,7 @@ namespace ChessEngine.Engine
                 }
                 else if (square.Piece.PieceColor == ChessPieceColor.Black)
                 {
-                    board.Score -= EvaluatePieceScore(square, x, board.EndGamePhase,
+                    board.Score -= EvaluatePieceScore(board, square, x, board.EndGamePhase,
                         ref blackKnightCount, ref blackBishopCount, ref insufficientMaterial);
 
 
@@ -412,6 +416,21 @@ namespace ChessEngine.Engine
                 if (!board.BlackCanCastle && !board.BlackCastled)
                 {
                     board.Score += 50;
+                }
+
+                // King-file openness — penalize open / half-open files near each king.
+                // Skipped in endgame because file-open attacks are a middlegame issue;
+                // in the endgame the king wants to be active anyway.
+                for (byte k = 0; k < 64; k++)
+                {
+                    var p = board.Squares[k].Piece;
+                    if (p == null || p.PieceType != ChessPieceType.King) continue;
+
+                    int kingSafety = EvaluateKingFileOpenness(k, p.PieceColor);
+                    if (p.PieceColor == ChessPieceColor.White)
+                        board.Score += kingSafety;
+                    else
+                        board.Score -= kingSafety;
                 }
             }
 
@@ -595,6 +614,75 @@ namespace ChessEngine.Engine
             }
 
             return 0;
+        }
+
+        // Penalize open / half-open files near the king. Pawn-count arrays must be fully
+        // populated (i.e., this is called after the main piece-scoring loop).
+        // Returns a score in the king-owner's POV — caller applies sign for white/black.
+        private static int EvaluateKingFileOpenness(byte kingPos, ChessPieceColor color)
+        {
+            int score = 0;
+            int kingFile = kingPos % 8;
+
+            for (int dFile = -1; dFile <= 1; dFile++)
+            {
+                int file = kingFile + dFile;
+                if (file < 0 || file > 7) continue;
+
+                short ourCount   = (color == ChessPieceColor.White) ? whitePawnCount[file] : blackPawnCount[file];
+                short theirCount = (color == ChessPieceColor.White) ? blackPawnCount[file] : whitePawnCount[file];
+
+                if (ourCount == 0)
+                {
+                    // Half-open file in front of our king — invitation to attack.
+                    // Centre files (king's own and direct neighbours) hurt more than wings.
+                    score -= (dFile == 0) ? 22 : 14;
+
+                    if (theirCount == 0)
+                    {
+                        // Fully open file (no pawn either side) — even worse for the
+                        // defender because heavy pieces have a clear lane to the king.
+                        score -= 10;
+                    }
+                }
+            }
+
+            return score;
+        }
+
+        // Pawn chains: a pawn defended by a friendly pawn on an adjacent file
+        // (one rank back) is on a solid chain. AttackedValue/DefendedValue are
+        // piece-value totals, so checking == 0 isn't enough — we want to know
+        // specifically that a *pawn* is the defender. Easier to do the geometric
+        // check directly. Returns chain bonus for one pawn (caller already
+        // applied its sign via the per-piece loop).
+        private static int PawnChainBonus(Board board, byte position, ChessPieceColor color)
+        {
+            int file = position % 8;
+            // Square one rank back, one file over. For white, "back" means smaller
+            // index (lower rank); for black, larger index.
+            int backRankDelta = (color == ChessPieceColor.White) ? -8 : 8;
+
+            int leftDefender  = position + backRankDelta - 1;
+            int rightDefender = position + backRankDelta + 1;
+
+            int score = 0;
+
+            // Left defender (only if not wrapping around the board edge).
+            if (file > 0 && leftDefender >= 0 && leftDefender < 64)
+            {
+                var p = board.Squares[leftDefender].Piece;
+                if (p != null && p.PieceType == ChessPieceType.Pawn && p.PieceColor == color)
+                    score += 5;
+            }
+            // Right defender.
+            if (file < 7 && rightDefender >= 0 && rightDefender < 64)
+            {
+                var p = board.Squares[rightDefender].Piece;
+                if (p != null && p.PieceType == ChessPieceType.Pawn && p.PieceColor == color)
+                    score += 5;
+            }
+            return score;
         }
     }
 }
