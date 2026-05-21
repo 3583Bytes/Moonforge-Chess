@@ -4,6 +4,53 @@ UCI-compatible chess engine written in C# / .NET 10.
 
 ChessCore implements the [Universal Chess Interface](https://backscattering.de/chess/uci/) protocol on stdin/stdout, so it plugs into any modern chess GUI — [Arena](http://www.playwitharena.de/), [Cute Chess](https://cutechess.com/), [BanksiaGUI](https://banksiagui.com/), [Nibbler](https://github.com/rooklift/nibbler), the ChessBase family, [lichess-bot](https://github.com/lichess-bot-devs/lichess-bot), etc. Earlier versions spoke the XBoard/WinBoard protocol; that has been replaced by UCI as of v1.1.
 
+## What's inside the engine
+
+The engine is a deliberately readable implementation — single-threaded, no
+bitboards, no machine-learned evaluation. Code is small enough that every
+component can be traced end-to-end.
+
+**Search** (`Search.cs`)
+
+- Negamax alpha-beta with iterative deepening at the root
+- Killer-move heuristic (two slots per ply) for move ordering
+- Check extension at the search horizon
+- Null move pruning (R=2), skipped in check / at low depth / in low-piece endings (zugzwang)
+- Quiescence search with stand-pat + SEE pruning on captures
+- Quiescence also considers non-capture *knight* checks at its first ply — catches the knight-fork class of horizon tactic
+- Transposition table (~1M entries, ~24 MB), depth-preferred replacement, TT-move first in ordering
+- Mate detection with depth-adjusted scores (shorter mates score higher)
+
+**Evaluation** (`Evaluation.cs`)
+
+- Material + piece-square tables (separate king PST for endgame)
+- Pawn structure: chains, doubled, isolated, passed (rank-weighted)
+- King safety: pawn-wall shelter, open / half-open file penalty, king-zone attack pressure (convex penalty for multiple attackers in the 3×3 box around the king)
+- Bishop pair, knight endgame discount, queen-out-early penalty
+- Mobility (valid-move count), hanging-piece double-penalty
+- Tempo bonus, castled bonus, lost-castling-rights penalty
+- Insufficient-material draw detection (handles KNvKN, KBvKB)
+
+**Move generation** (`PieceMoves.cs` / `PieceValidMoves.cs`)
+
+- Precomputed direction tables per piece type (built once at engine startup)
+- Per-piece valid-move lists + per-color attack boards rebuilt after each board mutation
+- Validated by perft from the start position through depth 5 (4,865,609 nodes)
+
+**Position state** (`Board.cs`, `Zobrist.cs`)
+
+- 64-square `Square[]` board with castling / en-passant / clock / king-position state
+- 64-bit Zobrist hash recomputed from scratch at the end of every `MovePiece` (cheaper than threading incremental updates through every special-case path)
+- 50-move rule, 3-fold repetition
+
+**Time controls and opening book**
+
+- `go wtime/btime/winc/binc/movestogo` is mapped to a search ply at the start of the search; the engine does not poll a deadline mid-search
+- Bundled opening book (~thousands of positions) consulted before search; book hits return in microseconds
+
+For reproducible search-performance numbers and a record of which changes
+moved them, see [`BASELINE.md`](BASELINE.md).
+
 ## Download a prebuilt binary
 
 Each tagged release on the [Releases page](https://github.com/3583Bytes/ChessCore/releases) ships with prebuilt single-file executables for Windows, Linux, and macOS (both Intel and Apple Silicon). Two flavors per platform:
