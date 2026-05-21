@@ -90,6 +90,47 @@ in a match (depth 6, with iterative-deepening extensions), node reductions of
 | Game 1 critical (Nf3+ fork, depth 6) | 1,697K | 1,414K | -17% |
 | Game 10 critical (Bxc2 line, depth 6) | 2,945K | 2,210K | -25% |
 
+### Transposition table (added on top of NMP)
+
+New `Zobrist.cs` (random per-(color,piece,square) tables + side-to-move + castling
++ en-passant file; deterministic seed). Hash recomputed from scratch at the end
+of `Board.MovePiece` — cheap (~64 reads + XORs) and avoids the long tail of
+incremental-update bugs around castling/promotion/EP captures. The `ZobristHash`
+field on `Board` was previously declared but never populated; the `Zobrist` class
+referenced in FileIO.cs was inside a `/* */` block and never compiled.
+
+New `TranspositionTable.cs` (2²⁰ = ~1M-entry array, 24 MB). At each `AlphaBeta`
+entry the table is probed: if a prior search at sufficient depth has a bound
+that satisfies the current α/β window, return immediately. The stored best
+move is captured and swapped to the front of the move list — this is where most
+of the search-tree shrinkage actually comes from. At each `AlphaBeta` exit the
+result is stored with the appropriate bound flag (`Exact` / `Lower` / `Upper`).
+
+Two refinements were needed before TT actually beat baseline:
+
+1. **Depth-preferred replacement.** A flood of depth-1 entries from the
+   root-level mate-check loop in `IterativeSearch` was wiping out deep cuts
+   under the always-replace policy. `Store` now refuses to overwrite a strictly
+   deeper entry unless it's the same key.
+2. **Move-hint depth gate.** A move stored from a depth-1 search is often a
+   worse ordering hint than the static capture+killer scoring. `Probe` now only
+   returns `bestSrc`/`bestDst` when the stored entry's depth is ≥ 2.
+
+Without (1) and (2), Kiwipete actually regressed by +27% nodes. With them in
+place, Kiwipete drops from 408K → 284K (-30%) and total bench from 741K → 527K
+(-29% nodes, -21% time). Same per-position depth, same engine moves.
+
+Mate scores deliberately not stored — they encode depth-from-root and would
+be wrong when retrieved from a different position. Small strength loss on
+mate puzzles; saves needing to thread a plies-from-root counter through the
+whole search.
+
+| Position | Before TT | With TT | Δ |
+|---|---|---|---|
+| Game 1 (Nf3+, depth 6) | 1,414K | 1,273K | -10% |
+| Game 10 (Bxc2 line, depth 6) | 2,210K | 1,628K | -26% |
+| Kiwipete bench (depth 5) | 405K | 284K | -30% |
+
 > **Note**: per-position numbers are useful for spotting regressions in a *single*
 > position type (e.g. endgames), but only the **total** is stable enough to gate
 > changes against. Per-position depth varies because iterative deepening's
@@ -103,7 +144,8 @@ in a match (depth 6, with iterative-deepening extensions), node reductions of
 | Post-eval-fixes (`cdbe753`) | 920,896 | ~6.7 s |
 | Post-eval-cleanup + book fixes (`6c6b81a`) | 792,281 | ~3.3 s |
 | King-safety + qsearch knight checks | 737,661 | ~7.6 s |
-| + null move pruning (current) | 741,618 | ~7.2 s |
+| + null move pruning | 741,618 | ~7.2 s |
+| + transposition table (current) | 527,110 | ~5.7 s |
 
 The biggest chunk of the latest drop (~132K nodes) is the `Start` bench position
 becoming a book hit instead of a depth-6 search — measured search performance on

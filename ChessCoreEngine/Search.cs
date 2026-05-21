@@ -227,6 +227,17 @@ namespace ChessEngine.Engine
                 }
             }
 
+            // Transposition table probe. If we've seen this exact position before
+            // at this depth or deeper, the stored bound may already cut us off.
+            // Even when it doesn't, the stored best move is captured and tried
+            // first below — that's where the bulk of the alpha-beta speedup comes
+            // from.
+            ulong ttKey = examineBoard.ZobristHash;
+            byte ttSrc, ttDst;
+            if (TranspositionTable.Probe(ttKey, depth, alpha, beta, out int ttScore, out ttSrc, out ttDst))
+                return ttScore;
+            int origAlpha = alpha;
+
             // Null move pruning. Hand the opponent a free move; if even then the
             // search comes back >= beta, the position is too good for us to need
             // to search properly — the opponent can't refute it from here.
@@ -290,6 +301,26 @@ namespace ChessEngine.Engine
 
             positions.Sort(Sort);
 
+            // Promote the TT move (best move from a prior search of this position)
+            // to the front. This is the biggest single move-ordering win — the
+            // prior search's best move is almost always still best, so trying it
+            // first lets alpha-beta cut the rest of the list cheaply.
+            if ((ttSrc != 0 || ttDst != 0))
+            {
+                for (int i = 1; i < positions.Count; i++)
+                {
+                    if (positions[i].SrcPosition == ttSrc && positions[i].DstPosition == ttDst)
+                    {
+                        Position tmp = positions[0];
+                        positions[0] = positions[i];
+                        positions[i] = tmp;
+                        break;
+                    }
+                }
+            }
+
+            byte bestSrc = 0, bestDst = 0;
+
             foreach (Position move in positions)
             {
                 List<Position> pvChild = new List<Position>();
@@ -330,7 +361,9 @@ namespace ChessEngine.Engine
 
                     kIndex = ((kIndex + 1) % 2);
 
-                    
+                    // Beta cutoff: score is a lower bound (true value ≥ beta).
+                    TranspositionTable.Store(ttKey, beta, depth, TranspositionTable.FlagLower,
+                        move.SrcPosition, move.DstPosition);
                     return beta;
                 }
                 if (value > alpha)
@@ -346,8 +379,16 @@ namespace ChessEngine.Engine
                     pvLine = pvChild;
 
                     alpha = (int)value;
+                    bestSrc = move.SrcPosition;
+                    bestDst = move.DstPosition;
                 }
             }
+
+            // Determine bound type and store:
+            //   alpha raised → at least one move strictly beat origAlpha → EXACT.
+            //   alpha unchanged → every move failed low → UPPER bound on true value.
+            byte storeFlag = (alpha > origAlpha) ? TranspositionTable.FlagExact : TranspositionTable.FlagUpper;
+            TranspositionTable.Store(ttKey, alpha, depth, storeFlag, bestSrc, bestDst);
 
             return alpha;
         }

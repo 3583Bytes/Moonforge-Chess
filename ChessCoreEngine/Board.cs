@@ -444,11 +444,12 @@ namespace ChessEngine.Engine
                         MoveCount = (byte)((MoveCount * 10) + 0);
                     }
 
-                    
+
 
                 }
             }
-     
+
+            ZobristHash = Zobrist.ComputeHash(this);
         }
 
         internal Board()
@@ -814,6 +815,13 @@ namespace ChessEngine.Engine
             {
                 board.StaleMate = true;
             }
+
+            // Recompute the Zobrist hash from the post-move board state. We do
+            // this fresh rather than incrementally so we don't have to thread
+            // hash-updates through every special-case path (castle, en-passant
+            // capture, promotion, …). Cheaper than the GenerateValidMoves call
+            // that the caller does next.
+            board.ZobristHash = Zobrist.ComputeHash(board);
 
             return board.LastMove;
         }

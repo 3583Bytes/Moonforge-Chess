@@ -199,6 +199,9 @@ namespace ChessEngine.Engine // Reverted to original namespace
         {
             InitiateEngine();
             InitiateBoard("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+            // Stored entries from a previous game can't help the new one and
+            // could give wrong cutoffs if a position happens to repeat — wipe.
+            TranspositionTable.Clear();
         }
 
         public void InitiateBoard(string fen)
