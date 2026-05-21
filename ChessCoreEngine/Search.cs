@@ -73,7 +73,7 @@ namespace ChessEngine.Engine
             //Can I make an instant mate?
             foreach (Board pos in succ.Positions)
             {
-                int value = -AlphaBeta(pos, 1, -beta, -alpha, ref nodesSearched, ref nodesQuiessence, ref pvChild, true);
+                int value = -AlphaBeta(pos, 1, -beta, -alpha, ref nodesSearched, ref nodesQuiessence, ref pvChild, true, true);
 
                 if (value >= 32767)
                 {
@@ -100,7 +100,7 @@ namespace ChessEngine.Engine
 
                 pvChild = new List<Position>();
 
-                int value = -AlphaBeta(pos, depth, -beta, -alpha, ref nodesSearched, ref nodesQuiessence, ref pvChild, false);
+                int value = -AlphaBeta(pos, depth, -beta, -alpha, ref nodesSearched, ref nodesQuiessence, ref pvChild, false, true);
 
                 // Don't short-circuit on the first mate: alpha-beta with depth-adjusted
                 // mate scores (see AlphaBeta:232) will naturally pick the shortest one
@@ -205,7 +205,7 @@ namespace ChessEngine.Engine
             return succ;
         }
 
-        private static int AlphaBeta(Board examineBoard, byte depth, int alpha, int beta, ref int nodesSearched, ref int nodesQuiessence, ref List<Position> pvLine, bool extended)
+        private static int AlphaBeta(Board examineBoard, byte depth, int alpha, int beta, ref int nodesSearched, ref int nodesQuiessence, ref List<Position> pvLine, bool extended, bool allowNullMove)
         {
             nodesSearched++;
 
@@ -225,6 +225,41 @@ namespace ChessEngine.Engine
                     //Perform a Quiessence Search
                     return Quiescence(examineBoard, alpha, beta, ref nodesQuiessence, 0);
                 }
+            }
+
+            // Null move pruning. Hand the opponent a free move; if even then the
+            // search comes back >= beta, the position is too good for us to need
+            // to search properly — the opponent can't refute it from here.
+            // Skip when:
+            //   * in check (a null leaves our king attacked, illegal)
+            //   * depth too low for the reduction to pay off
+            //   * caller was itself a null (avoids double-null which proves nothing)
+            //   * few pieces left (zugzwang: "doing nothing" can genuinely be best
+            //     in K+P endgames, so NMP gives wrong cutoffs)
+            //   * |beta| near mate (cutoffs against mate scores are unreliable)
+            const byte NullR = 2;
+            if (allowNullMove
+                && depth >= 1 + NullR
+                && !(examineBoard.WhiteCheck || examineBoard.BlackCheck)
+                && piecesRemaining > 6
+                && Math.Abs(beta) < 30000)
+            {
+                Board nullBoard = examineBoard.FastCopy();
+                nullBoard.WhoseMove = examineBoard.WhoseMove == ChessPieceColor.White
+                    ? ChessPieceColor.Black
+                    : ChessPieceColor.White;
+                // The en-passant target was set up by our prior move's
+                // pawn-push; if we pass instead, that target is no longer
+                // legitimately capturable. Clear it so the null search doesn't
+                // see an illegal en-passant capture as legal.
+                nullBoard.EnPassantPosition = 0;
+                PieceValidMoves.GenerateValidMoves(nullBoard);
+
+                List<Position> nullPv = new List<Position>();
+                int nullScore = -AlphaBeta(nullBoard, (byte)(depth - 1 - NullR), -beta, -beta + 1,
+                    ref nodesSearched, ref nodesQuiessence, ref nullPv, extended, false);
+                if (nullScore >= beta)
+                    return beta;
             }
 
             List<Position> positions = EvaluateMoves(examineBoard, depth);
@@ -286,7 +321,7 @@ namespace ChessEngine.Engine
                     }
                 }
 
-                int value = -AlphaBeta(board, (byte)(depth - 1), -beta, -alpha, ref nodesSearched, ref nodesQuiessence, ref pvChild, extended);
+                int value = -AlphaBeta(board, (byte)(depth - 1), -beta, -alpha, ref nodesSearched, ref nodesQuiessence, ref pvChild, extended, true);
 
                 if (value >= beta)
                 {

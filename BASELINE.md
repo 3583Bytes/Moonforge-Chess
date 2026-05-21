@@ -70,6 +70,26 @@ Per-node cost increase comes from, in order of impact:
 Strength impact (vs the 0-10 baseline against Rybka@2000) is measured separately
 — see `_match_rybka2000.log` after running `_run_match_rybka_2000.ps1`.
 
+### Null move pruning (added on top of king-safety + qsearch knight checks)
+
+`Search.AlphaBeta` now does a null move at internal nodes: hand the opponent a
+free move and search with reduction `R=2` (so `depth - 1 - R` plies) using a
+zero-window around `beta`. If the result still beats `beta`, return `beta` —
+the opponent can't refute this position. Skipped when in check, when
+`piecesRemaining ≤ 6` (zugzwang risk in pawn endgames), when the caller was
+itself a null move (no double-null), and when `|beta| ≥ 30000` (unreliable
+against mate scores and against the infinity bound at root).
+
+Bench at fixed depth 5 barely moves (NMP only helps significantly at depth ≥ 8
+where the saved subtrees are larger). But at the depths real moves are searched
+in a match (depth 6, with iterative-deepening extensions), node reductions of
+**17–25%** show up in actual positions:
+
+| Position | Before NMP | With NMP | Δ |
+|---|---|---|---|
+| Game 1 critical (Nf3+ fork, depth 6) | 1,697K | 1,414K | -17% |
+| Game 10 critical (Bxc2 line, depth 6) | 2,945K | 2,210K | -25% |
+
 > **Note**: per-position numbers are useful for spotting regressions in a *single*
 > position type (e.g. endgames), but only the **total** is stable enough to gate
 > changes against. Per-position depth varies because iterative deepening's
@@ -82,7 +102,8 @@ Strength impact (vs the 0-10 baseline against Rybka@2000) is measured separately
 | Post-search-fixes (`7ce9e74`) | 999,890 | ~9.5 s |
 | Post-eval-fixes (`cdbe753`) | 920,896 | ~6.7 s |
 | Post-eval-cleanup + book fixes (`6c6b81a`) | 792,281 | ~3.3 s |
-| King-safety + qsearch knight checks (current) | 737,661 | ~7.6 s |
+| King-safety + qsearch knight checks | 737,661 | ~7.6 s |
+| + null move pruning (current) | 741,618 | ~7.2 s |
 
 The biggest chunk of the latest drop (~132K nodes) is the `Start` bench position
 becoming a book hit instead of a depth-6 search — measured search performance on
