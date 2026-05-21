@@ -19,42 +19,56 @@ JIT warmup and OS scheduling jitter; the median of five is stable enough.
 
 ## Current baseline
 
-Captured on .NET 10.0.7 / Windows 11 x64 after a round of eval/search cleanup
-and book fixes on top of `cdbe753`:
+Captured on .NET 10.0.7 / Windows 11 x64 after adding king-zone-attack eval
+and quiescence knight-check extension on top of `6c6b81a`:
 
-- `Evaluation.cs`: removed duplicate endgame-check bonus, fixed pawn-wall king
-  exclusion (e1/e8 only, not d1/d8), pooled the per-call `pawnCount` arrays
-  (no allocation per eval), corrected the insufficient-material classifier
-  (KNvKN and KBvKB are now flagged insufficient), removed dead mate-sentinel
-  branch (mate is owned by `Search`), tightened bishop-pair bonus to fire
-  exactly once, and rewrote the black-piece PST mirror as `position ^ 56`.
-- `Search.cs`: removed the root-level "return on first mate found"
-  short-circuit so alpha-beta's depth-adjusted mate scores actually pick the
-  shortest mate. Side-effect: `plyDepthReached` increases by 1 in mate-bearing
-  bench positions (the old short-circuit returned before the final `++`).
-- `Engine.cs`: `InitiateBoard` now resets `MoveHistory` / `CurrentGameBook` /
-  undo slots — previously stale across UCI `position` commands, which made
-  the engine emit `bestmove 0000` after a few moves of normal play.
-- `Book.cs`: the startpos entry was constructed but never `Add`-ed; first move
-  from `position startpos` now hits the book instead of running a search.
-  Removed a duplicate `Add` at the very end of the book.
+- `Evaluation.cs`: added `EvaluateKingZoneAttacks`. For each king, count enemy
+  attacks on the 8 surrounding squares using the existing `*AttackBoard`, then
+  apply convex penalty `{0,-4,-12,-24,-40,-60,-80,-100}[count]` so the 3rd+
+  attacker hurts disproportionately. Skipped in endgame (king activity wanted).
+  Replaced the prior 64-square king-finding loop in the king-safety block with
+  direct `Board.{White,Black}KingPosition` reads.
+- `Search.cs`: quiescence now considers non-capture *knight* checks at the
+  first qsearch ply only. New focused generator `EvaluateMovesQPlusKnightChecks`
+  emits captures + non-capture knight moves landing on `KnightMoves[enemyKingPos]`
+  (the squares from which a knight checks the enemy king). At `qsPly >= 1`
+  qsearch stays captures-only. Slider/pawn checks excluded — cheap detection
+  needs blocker walks and isn't worth the per-node cost yet.
 
 ```
-total nodes 792_281    (deterministic — same across all runs)
-total time  ~3_300 ms  (median; range 2.9–3.3 s)
-total NPS   ~243_000   (median; range 239K–276K)
+total nodes  737_661    (deterministic across runs)
+total time   ~7_600 ms  (median; range 6.8–9.2 s — variance dominated by OS jitter)
+total NPS    ~97_000    (median)
 ```
 
 Per-position breakdown from one representative run:
 
 ```
-Start         depth 0 nodes      0 time   12ms nps        0  (book hit)
-Kiwipete      depth 5 nodes 407514 time 1742ms nps   233934
-Endgame       depth 6 nodes  35325 time   50ms nps   706500
-BK.01         depth 5 nodes 346075 time 1349ms nps   256541
-KRk endgame   depth 7 nodes    981 time    0ms (sub-ms — discard NPS)
-Promotion     depth 7 nodes   2386 time    1ms (sub-ms — discard NPS)
+Start         depth 0 nodes      0 time   27ms nps        0  (book hit)
+Kiwipete      depth 5 nodes 424726 time 4264ms nps    99607
+Endgame       depth 6 nodes  38825 time  134ms nps   289738
+BK.01         depth 5 nodes 270743 time 3201ms nps    84580
+KRk endgame   depth 7 nodes    981 time    1ms (sub-ms — discard NPS)
+Promotion     depth 7 nodes   2386 time    4ms (sub-ms — discard NPS)
 ```
+
+Compared to the prior baseline (792_281 nodes / 3_300 ms / 243K NPS):
+
+- **Nodes -7%** (737K vs 792K). King-safety eval prunes better, especially in
+  BK.01 (-22%) where king-attack patterns are common.
+- **Time +130%** (7.6 s vs 3.3 s). Per-node cost roughly doubled.
+- **NPS -60%** (97K vs 243K). The trade is per-node accuracy for raw speed.
+
+Per-node cost increase comes from, in order of impact:
+
+1. Quiescence at `qsPly==0` now searches captures *plus* non-capture knight
+   checks. Even with the focused generator the move list is bigger and each
+   qsearch node costs more.
+2. `EvaluateKingZoneAttacks` adds 16 attack-board lookups × 2 kings per eval.
+   Small in isolation, but eval is called once per node.
+
+Strength impact (vs the 0-10 baseline against Rybka@2000) is measured separately
+— see `_match_rybka2000.log` after running `_run_match_rybka_2000.ps1`.
 
 > **Note**: per-position numbers are useful for spotting regressions in a *single*
 > position type (e.g. endgames), but only the **total** is stable enough to gate
@@ -67,7 +81,8 @@ Promotion     depth 7 nodes   2386 time    1ms (sub-ms — discard NPS)
 |---|---|---|
 | Post-search-fixes (`7ce9e74`) | 999,890 | ~9.5 s |
 | Post-eval-fixes (`cdbe753`) | 920,896 | ~6.7 s |
-| Post-eval-cleanup + book fixes (current) | 792,281 | ~3.3 s |
+| Post-eval-cleanup + book fixes (`6c6b81a`) | 792,281 | ~3.3 s |
+| King-safety + qsearch knight checks (current) | 737,661 | ~7.6 s |
 
 The biggest chunk of the latest drop (~132K nodes) is the `Start` bench position
 becoming a book hit instead of a depth-6 search — measured search performance on

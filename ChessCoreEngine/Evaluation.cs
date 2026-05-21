@@ -418,20 +418,13 @@ namespace ChessEngine.Engine
                     board.Score += 50;
                 }
 
-                // King-file openness — penalize open / half-open files near each king.
-                // Skipped in endgame because file-open attacks are a middlegame issue;
-                // in the endgame the king wants to be active anyway.
-                for (byte k = 0; k < 64; k++)
-                {
-                    var p = board.Squares[k].Piece;
-                    if (p == null || p.PieceType != ChessPieceType.King) continue;
-
-                    int kingSafety = EvaluateKingFileOpenness(k, p.PieceColor);
-                    if (p.PieceColor == ChessPieceColor.White)
-                        board.Score += kingSafety;
-                    else
-                        board.Score -= kingSafety;
-                }
+                // King-file openness + king-zone attack pressure. Skipped in
+                // endgame because king activity is wanted there. The Board
+                // tracks king positions directly so we avoid a 64-square scan.
+                board.Score += EvaluateKingFileOpenness(board.WhiteKingPosition, ChessPieceColor.White)
+                             + EvaluateKingZoneAttacks(board, board.WhiteKingPosition, ChessPieceColor.White);
+                board.Score -= EvaluateKingFileOpenness(board.BlackKingPosition, ChessPieceColor.Black)
+                             + EvaluateKingZoneAttacks(board, board.BlackKingPosition, ChessPieceColor.Black);
             }
 
             //Black Isolated Pawns
@@ -648,6 +641,38 @@ namespace ChessEngine.Engine
             }
 
             return score;
+        }
+
+        // King-zone attack pressure — count enemy-attacked squares in the 3x3 box
+        // around the king (excluding the king's own square). Penalty grows
+        // faster than linear because the 3rd+ attacker is when real mating
+        // nets form — that's the signal the static eval was missing in games
+        // 4, 7, and 9 (deep queen sorties + exposed king). Endgame is excluded;
+        // king activity is wanted there. Returns a score in the king-owner's
+        // POV — caller applies sign for white/black.
+        private static readonly short[] KingZoneAttackPenalty = { 0, -4, -12, -24, -40, -60, -80, -100 };
+
+        private static int EvaluateKingZoneAttacks(Board board, byte kingPos, ChessPieceColor color)
+        {
+            bool[] enemyAttack = (color == ChessPieceColor.White) ? board.BlackAttackBoard : board.WhiteAttackBoard;
+
+            int kingFile = kingPos % 8;
+            int kingRank = kingPos / 8;
+            int attacked = 0;
+
+            for (int dr = -1; dr <= 1; dr++)
+            {
+                for (int df = -1; df <= 1; df++)
+                {
+                    if (dr == 0 && df == 0) continue;
+                    int f = kingFile + df;
+                    int r = kingRank + dr;
+                    if (f < 0 || f > 7 || r < 0 || r > 7) continue;
+                    if (enemyAttack[r * 8 + f]) attacked++;
+                }
+            }
+
+            return KingZoneAttackPenalty[Math.Min(attacked, 7)];
         }
 
         // Pawn chains: a pawn defended by a friendly pawn on an adjacent file

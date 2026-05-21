@@ -223,7 +223,7 @@ namespace ChessEngine.Engine
                 else
                 {
                     //Perform a Quiessence Search
-                    return Quiescence(examineBoard, alpha, beta, ref nodesQuiessence);
+                    return Quiescence(examineBoard, alpha, beta, ref nodesQuiessence, 0);
                 }
             }
 
@@ -317,7 +317,7 @@ namespace ChessEngine.Engine
             return alpha;
         }
 
-        private static int Quiescence(Board examineBoard, int alpha, int beta, ref int nodesSearched)
+        private static int Quiescence(Board examineBoard, int alpha, int beta, ref int nodesSearched, int qsPly)
         {
             nodesSearched++;
 
@@ -333,30 +333,50 @@ namespace ChessEngine.Engine
             if (examineBoard.Score > alpha)
                 alpha = examineBoard.Score;
 
-            
-            List<Position> positions;
-          
 
-            if (examineBoard.WhiteCheck || examineBoard.BlackCheck)
+            List<Position> positions;
+            bool inCheck = examineBoard.WhiteCheck || examineBoard.BlackCheck;
+            // At the first quiescence ply also consider non-capture *knight*
+            // checks. This catches forking tactics like the Nf3+ pattern from
+            // game 1 (knight at e5 -> f3, forks K+R) that captures-only qsearch
+            // misses. Bounded to qsPly == 0 so the tree doesn't explode, and
+            // bounded to knights so we can pre-filter cheaply with the
+            // precomputed KnightMoves table — full slider-check detection
+            // needs blocker walks and isn't worth the per-node cost yet.
+            bool includeChecks = qsPly == 0 && !inCheck;
+
+            byte enemyKingPos = examineBoard.WhoseMove == ChessPieceColor.White
+                ? examineBoard.BlackKingPosition
+                : examineBoard.WhiteKingPosition;
+
+            if (inCheck)
             {
                 positions = EvaluateMoves(examineBoard, 0);
             }
+            else if (includeChecks)
+            {
+                positions = EvaluateMovesQPlusKnightChecks(examineBoard, enemyKingPos);
+            }
             else
             {
-                positions = EvaluateMovesQ(examineBoard);    
+                positions = EvaluateMovesQ(examineBoard);
             }
 
             if (positions.Count == 0)
             {
                 return examineBoard.Score;
             }
-            
+
             positions.Sort(Sort);
 
             foreach (Position move in positions)
             {
+                bool isCapture = examineBoard.Squares[move.DstPosition].Piece != null;
+
                 // Skip captures that look like material losses; keep equal/winning ones.
-                if (StaticExchangeEvaluation(examineBoard.Squares[move.DstPosition]) < 0)
+                // Non-captures emitted by the generators (inCheck evasions, knight
+                // checks at qsPly==0) bypass SEE.
+                if (isCapture && StaticExchangeEvaluation(examineBoard.Squares[move.DstPosition]) < 0)
                 {
                     continue;
                 }
@@ -388,7 +408,7 @@ namespace ChessEngine.Engine
                     }
                 }
 
-                int value = -Quiescence(board, - beta, -alpha, ref nodesSearched);
+                int value = -Quiescence(board, -beta, -alpha, ref nodesSearched, qsPly + 1);
 
                 if (value >= beta)
                 {
@@ -510,6 +530,65 @@ namespace ChessEngine.Engine
                         }
                     }
 
+                    positions.Add(move);
+                }
+            }
+
+            return positions;
+        }
+
+        // Captures + non-capture knight checks (squares from which a knight
+        // would attack enemyKingPos). Used at the first quiescence ply when
+        // not already in check, so the tree picks up tactical knight forks
+        // (the Game 1 Nf3+ pattern) without paying the full EvaluateMoves
+        // cost. Sliders/pawn checks omitted — too expensive to detect cheaply.
+        private static List<Position> EvaluateMovesQPlusKnightChecks(Board examineBoard, byte enemyKingPos)
+        {
+            List<Position> positions = new List<Position>();
+            List<byte> knightCheckSquares = MoveArrays.KnightMoves[enemyKingPos].Moves;
+            ChessPieceColor color = examineBoard.WhoseMove;
+
+            for (byte x = 0; x < 64; x++)
+            {
+                Piece piece = examineBoard.Squares[x].Piece;
+                if (piece == null) continue;
+                if (piece.PieceColor != color) continue;
+
+                bool isKnight = piece.PieceType == ChessPieceType.Knight;
+
+                foreach (byte dst in piece.ValidMoves)
+                {
+                    Piece pieceAttacked = examineBoard.Squares[dst].Piece;
+                    bool isCapture = pieceAttacked != null;
+
+                    if (!isCapture)
+                    {
+                        // Non-capture: only emit if it's a knight giving check.
+                        if (!isKnight) continue;
+                        if (!knightCheckSquares.Contains(dst)) continue;
+                    }
+
+                    Position move = new Position();
+                    move.SrcPosition = x;
+                    move.DstPosition = dst;
+
+                    if (move.SrcPosition == KillerMove[2, 0].SrcPosition && move.DstPosition == KillerMove[2, 0].DstPosition)
+                    {
+                        move.Score += 5000;
+                        positions.Add(move);
+                        continue;
+                    }
+
+                    if (isCapture)
+                    {
+                        move.Score += pieceAttacked.PieceValue;
+                        if (piece.PieceValue < pieceAttacked.PieceValue)
+                        {
+                            move.Score += pieceAttacked.PieceValue - piece.PieceValue;
+                        }
+                    }
+
+                    move.Score += piece.PieceActionValue;
                     positions.Add(move);
                 }
             }

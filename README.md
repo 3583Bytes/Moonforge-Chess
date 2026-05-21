@@ -1,4 +1,4 @@
-# ChessCore
+# Moonforge Chess
 
 UCI-compatible chess engine written in C# / .NET 10.
 
