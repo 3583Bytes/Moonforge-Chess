@@ -1,15 +1,43 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 
 namespace ChessEngine.Engine
 {
     internal static class Search
     {
         internal static int progress;
-		
+
 		private static int piecesRemaining;
-		
+
+        // Time-abort plumbing. _searchClock starts when IterativeSearch begins; _deadlineTicks
+        // is the Stopwatch.GetTimestamp() value beyond which the next abort check trips
+        // _aborted. _deadlineTicks == 0 disables the deadline entirely (used by `go depth N`
+        // and bench, which want fixed-depth behavior).
+        //
+        // We poll every _abortCheckInterval node visits rather than every node — Stopwatch
+        // reads are ~20ns each, but at ~200kn/s that's still measurable overhead, and the
+        // abort can tolerate a few ms of latency.
+        private const int _abortCheckInterval = 2048;
+        private static long _deadlineTicks;
+        private static long _searchStartTicks;
+        private static bool _aborted;
+        private static int _abortCheckCounter;
+
+        private static bool CheckAbort()
+        {
+            if (_aborted) return true;
+            if (_deadlineTicks == 0) return false;
+            if (++_abortCheckCounter < _abortCheckInterval) return false;
+            _abortCheckCounter = 0;
+            if (Stopwatch.GetTimestamp() >= _deadlineTicks)
+            {
+                _aborted = true;
+                return true;
+            }
+            return false;
+        }
 
         private struct Position
         {
@@ -49,98 +77,150 @@ namespace ChessEngine.Engine
 
        
 
-        internal static MoveContent IterativeSearch(Board examineBoard, byte depth, ref int nodesSearched, ref int nodesQuiessence, ref string pvLine, ref byte plyDepthReached, ref byte rootMovesSearched, List<OpeningMove> currentGameBook, out int searchScore)
+        // Iterative deepening with optional wall-clock abort.
+        //
+        // `maxDepth` is the hard ceiling. `deadlineMs` is the soft cap: when > 0, the
+        // search stops the next time a node check trips after `deadlineMs` of wall time.
+        // Partial iterations are discarded — we always return the best move from the
+        // last *completed* depth. With deadlineMs == 0 (e.g. `go depth N`, bench, training
+        // mode), the search runs to maxDepth deterministically.
+        //
+        // The big win over the prior fixed-depth search: every speedup we've added (TT,
+        // null move, LMR) now translates into more depth within the same budget, rather
+        // than being thrown away by a coarse depth bucket.
+        internal static MoveContent IterativeSearch(Board examineBoard, byte maxDepth, long deadlineMs, ref int nodesSearched, ref int nodesQuiessence, ref string pvLine, ref byte plyDepthReached, ref byte rootMovesSearched, List<OpeningMove> currentGameBook, out int searchScore)
         {
-            List<Position> pvChild = new List<Position>();
-            int alpha = -400000000;
-            const int beta = 400000000;
+            // Reset abort state and start the clock.
+            _aborted = false;
+            _abortCheckCounter = 0;
+            _searchStartTicks = Stopwatch.GetTimestamp();
+            _deadlineTicks = deadlineMs > 0
+                ? _searchStartTicks + (long)(deadlineMs * Stopwatch.Frequency / 1000L)
+                : 0;
+
             searchScore = 0;
+            plyDepthReached = 0;
 
-            MoveContent bestMove = new MoveContent();
-
-            //We are going to store our result boards here           
+            // Build root move list once. GetSortValidMoves filters illegal moves, scores
+            // each post-move position via the static eval, and sorts descending — so
+            // succ.Positions[0] is the static-eval-best move and a safe fallback if we
+            // never complete a single iteration.
             ResultBoards succ = GetSortValidMoves(examineBoard);
-
             rootMovesSearched = (byte)succ.Positions.Count;
+
+            if (rootMovesSearched == 0)
+            {
+                // No legal moves — caller (Engine.AiPonderMove) detects mate/stalemate
+                // before getting here, but defend anyway.
+                return new MoveContent();
+            }
 
             if (rootMovesSearched == 1)
             {
-                //I only have one move
+                // Only one legal move; no point searching it.
                 searchScore = succ.Positions[0].Score;
                 return succ.Positions[0].LastMove;
             }
 
-            //Can I make an instant mate?
-            foreach (Board pos in succ.Positions)
+            // Endgame / low-mobility ceiling boost. Same heuristic as the prior code —
+            // when there are few moves or few pieces, push the ceiling up by 1-2 plies
+            // because the branching factor is small.
+            byte ceiling = ModifyDepth(maxDepth, succ.Positions.Count);
+
+            // Fallback in case the very first iteration is aborted mid-way: the static-eval
+            // best move from move ordering. Should be rare in practice (depth 1 finishes
+            // in microseconds even on big positions).
+            MoveContent bestMove = succ.Positions[0].LastMove;
+            int bestScore = succ.Positions[0].Score;
+            string bestPv = bestMove.ToString();
+
+            for (byte d = 1; d <= ceiling; d++)
             {
-                int value = -AlphaBeta(pos, 1, -beta, -alpha, ref nodesSearched, ref nodesQuiessence, ref pvChild, true, true);
-
-                if (value >= 32767)
+                // Promote the previous iteration's best move to root[0] so its likely TT
+                // hit and tight alpha-beta window benefit every subsequent move at this
+                // depth. By far the most impactful ordering change at the root.
+                if (d > 1)
                 {
-                    searchScore = value;
-                    return pos.LastMove;
-                }
-            }
-
-            int currentBoard = 0;
-
-            alpha = -400000000;
-
-            succ.Positions.Sort(Sort);
-
-            depth--;
-
-            plyDepthReached = ModifyDepth(depth, succ.Positions.Count);
-
-            foreach (Board pos in succ.Positions)
-            {
-                currentBoard++;
-
-				progress = (int)((currentBoard / (decimal)succ.Positions.Count) * 100);
-
-                pvChild = new List<Position>();
-
-                int value = -AlphaBeta(pos, depth, -beta, -alpha, ref nodesSearched, ref nodesQuiessence, ref pvChild, false, true);
-
-                // Don't short-circuit on the first mate: alpha-beta with depth-adjusted
-                // mate scores (see AlphaBeta:232) will naturally pick the shortest one
-                // because faster mates have higher scores.
-
-                if (examineBoard.RepeatedMove == 2)
-                {
-                    string fen = Board.Fen(true, pos);
-
-                    foreach (OpeningMove move in currentGameBook)
+                    for (int i = 1; i < succ.Positions.Count; i++)
                     {
-                        if (move.EndingFEN == fen)
+                        var lm = succ.Positions[i].LastMove.MovingPiecePrimary;
+                        if (lm.SrcPosition == bestMove.MovingPiecePrimary.SrcPosition
+                            && lm.DstPosition == bestMove.MovingPiecePrimary.DstPosition)
                         {
-                            value = 0;
+                            Board tmp = succ.Positions[0];
+                            succ.Positions[0] = succ.Positions[i];
+                            succ.Positions[i] = tmp;
                             break;
                         }
                     }
                 }
 
-                pos.Score = value;
+                int alpha = -400000000;
+                const int beta = 400000000;
+                MoveContent iterBest = succ.Positions[0].LastMove;
+                int iterBestScore = -400000000;
+                string iterPv = iterBest.ToString();
+                bool iterCompleted = true;
 
-                //If value is greater then alpha this is the best board
-                if (value > alpha || alpha == -400000000)
+                for (int i = 0; i < succ.Positions.Count; i++)
                 {
-                    pvLine = pos.LastMove.ToString();
+                    Board pos = succ.Positions[i];
+                    progress = (int)(((i + 1) / (decimal)succ.Positions.Count) * 100);
 
-                    foreach (Position pvPos in pvChild)
+                    List<Position> pvChild = new List<Position>();
+                    // We've already made one move into `pos`, so AlphaBeta searches (d-1)
+                    // more plies; total visible depth from the root is d.
+                    int value = -AlphaBeta(pos, (byte)(d - 1), -beta, -alpha, ref nodesSearched, ref nodesQuiessence, ref pvChild, false, true);
+
+                    if (_aborted) { iterCompleted = false; break; }
+
+                    // 3-fold avoidance: at RepeatedMove==2 the next visit to a position
+                    // already in our game book is a forced draw. Score it as 0 so we
+                    // don't blunder into a draw when winning. (Inherited from prior code.)
+                    if (examineBoard.RepeatedMove == 2)
                     {
-                        pvLine += " " + pvPos.ToString();
+                        string fen = Board.Fen(true, pos);
+                        foreach (OpeningMove move in currentGameBook)
+                        {
+                            if (move.EndingFEN == fen) { value = 0; break; }
+                        }
                     }
 
-                    alpha = value;
-                    bestMove = pos.LastMove;
+                    pos.Score = value;
+
+                    if (value > iterBestScore)
+                    {
+                        iterBestScore = value;
+                        iterBest = pos.LastMove;
+
+                        string pv = pos.LastMove.ToString();
+                        foreach (Position pvPos in pvChild) pv += " " + pvPos.ToString();
+                        iterPv = pv;
+
+                        if (value > alpha) alpha = value;
+                    }
                 }
+
+                progress = 100;
+
+                // If we aborted partway through an iteration the partial results aren't
+                // trustworthy (some moves at this depth weren't searched) — discard and
+                // keep the previous iteration's best.
+                if (!iterCompleted) break;
+
+                bestMove = iterBest;
+                bestScore = iterBestScore;
+                bestPv = iterPv;
+                plyDepthReached = d;
+
+                // Found a forced mate — searching deeper would only refine the mate distance,
+                // and the score encoding (32767+depth) already guarantees the shortest mate
+                // is picked. Save time.
+                if (bestScore >= 32767) break;
             }
 
-            plyDepthReached++;
-			progress=100;
-
-            searchScore = alpha;
+            searchScore = bestScore;
+            pvLine = bestPv;
             return bestMove;
         }
 
@@ -208,6 +288,10 @@ namespace ChessEngine.Engine
         private static int AlphaBeta(Board examineBoard, byte depth, int alpha, int beta, ref int nodesSearched, ref int nodesQuiessence, ref List<Position> pvLine, bool extended, bool allowNullMove)
         {
             nodesSearched++;
+
+            // Time abort: bail out of the recursion. The returned value is meaningless —
+            // IterativeSearch checks _aborted after this call and discards the partial result.
+            if (CheckAbort()) return 0;
 
             if (examineBoard.HalfMoveClock >= 100 || examineBoard.RepeatedMove >= 3)
                 return 0;
@@ -448,6 +532,10 @@ namespace ChessEngine.Engine
         private static int Quiescence(Board examineBoard, int alpha, int beta, ref int nodesSearched, int qsPly)
         {
             nodesSearched++;
+
+            // Same abort guard as AlphaBeta — qsearch trees can run a long time on
+            // capture-heavy positions, so we need a deadline check here too.
+            if (CheckAbort()) return 0;
 
             //Evaluate Score
             Evaluation.EvaluateBoardScore(examineBoard);

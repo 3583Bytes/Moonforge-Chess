@@ -189,7 +189,9 @@ namespace ChessCore
                 }
             }
 
-            _engine.PlyDepthSearched = PickDepth(depth, movetimeMs, wtime, btime, winc, binc, movestogo, infinite);
+            var (ceiling, deadlineMs) = PickBudget(depth, movetimeMs, wtime, btime, winc, binc, movestogo, infinite);
+            _engine.PlyDepthSearched = ceiling;
+            _engine.SearchDeadlineMs = deadlineMs;
 
             var sw = Stopwatch.StartNew();
             var movesBefore = _engine.GetMoveHistory().Count;
@@ -210,10 +212,31 @@ namespace ChessCore
             Send("bestmove " + MoveToUci(last));
         }
 
-        private static byte PickDepth(int depth, int movetimeMs, int wtime, int btime, int winc, int binc, int movestogo, bool infinite)
+        // Map UCI `go` arguments to a (depth ceiling, wall-clock deadline) pair for the engine.
+        //
+        // The engine's IterativeSearch is now real ID: it runs depth 1, 2, 3... up to `ceiling`,
+        // stopping early if the deadline (in ms from search start) is exceeded. Two modes:
+        //
+        //   * Fixed depth (`go depth N`, `go infinite`, no time info): deadline = 0, ceiling
+        //     bounds the search. Deterministic, reproducible — what bench and training mode want.
+        //   * Time-bounded: deadline = computed budget, ceiling = very high (32). The search
+        //     runs until time runs out and returns the best move from the last completed depth.
+        //
+        // Side-to-move comes from `_engine.WhoseMove` (set by the prior `position` command),
+        // so this is non-static — fixes a real bug in the old PickDepth where unequal clocks
+        // could pick the wrong side's time via Math.Max.
+        private (byte ceiling, long deadlineMs) PickBudget(int depth, int movetimeMs, int wtime, int btime, int winc, int binc, int movestogo, bool infinite)
         {
-            if (depth > 0) return (byte)Math.Min(depth, 9);
-            if (infinite)   return 7;
+            // Generous ceiling for time-bounded search — high enough that the deadline always
+            // binds first on realistic positions. ModifyDepth can add +2; keep clear of byte max.
+            const byte HighCeiling = 32;
+            // Pulled-from-the-air safety margin so we abort before the GUI's hard clock runs
+            // out. 50ms covers abort poll latency (~10ms at 200k nps), UCI overhead, and OS
+            // scheduling jitter. Scaled at 5% of budget for very long TCs.
+            const int SafetyMs = 50;
+
+            if (depth > 0)   return ((byte)Math.Min(depth, HighCeiling), 0);
+            if (infinite)    return (HighCeiling, 0);
 
             int budget;
             if (movetimeMs > 0)
@@ -222,25 +245,20 @@ namespace ChessCore
             }
             else if (wtime > 0 || btime > 0)
             {
-                // We don't know which side the GUI is asking us to think for, but the engine has
-                // WhoseMove set correctly from the prior `position` command — use it.
-                // (Static class so we replicate that bit of state here via the budget formula.)
-                int myTime = Math.Max(wtime, btime);
-                int myInc  = Math.Max(winc,  binc);
+                int myTime = _engine.WhoseMove == ChessPieceColor.White ? wtime : btime;
+                int myInc  = _engine.WhoseMove == ChessPieceColor.White ? winc  : binc;
+                if (myTime <= 0) myTime = Math.Max(wtime, btime); // defensive fallback
                 int slices = movestogo > 0 ? Math.Min(movestogo, 40) : 30;
                 budget = (myTime / slices) + (int)(myInc * 0.8);
             }
             else
             {
-                return 5; // no time info at all — fall back to Medium
+                return (5, 0); // no time info at all — Medium-ish fixed depth
             }
 
-            if (budget < 100)    return 2;
-            if (budget < 500)    return 3;
-            if (budget < 2_000)  return 4;
-            if (budget < 10_000) return 5;
-            if (budget < 30_000) return 6;
-            return 7;
+            int margin = Math.Max(SafetyMs, budget / 20);
+            long deadline = Math.Max(10, budget - margin);
+            return (HighCeiling, deadline);
         }
 
         private void EmitInfo(long elapsedMs)
@@ -333,9 +351,11 @@ namespace ChessCore
             Send("info string bench depth=" + depth + ", positions=" + BenchPositions.Length);
 
             byte savedDepth = _engine.PlyDepthSearched;
+            long savedDeadline = _engine.SearchDeadlineMs;
             try
             {
                 _engine.PlyDepthSearched = depth;
+                _engine.SearchDeadlineMs = 0; // bench wants deterministic fixed-depth, no clock
                 foreach (var (name, fen) in BenchPositions)
                 {
                     _engine.InitiateBoard(fen);
@@ -355,6 +375,7 @@ namespace ChessCore
             finally
             {
                 _engine.PlyDepthSearched = savedDepth;
+                _engine.SearchDeadlineMs = savedDeadline;
                 _engine.NewGame(); // bench mutates the board; reset so subsequent commands aren't surprising
             }
 

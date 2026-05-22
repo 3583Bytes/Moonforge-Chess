@@ -62,6 +62,11 @@ namespace ChessEngine.Engine // Reverted to original namespace
         public byte PlyDepthSearched;
         public byte PlyDepthReached;
         public byte RootMovesSearched;
+        // Wall-clock cap for the next search, in milliseconds. 0 disables the deadline
+        // (used by `go depth N`, bench, and training mode — they want deterministic
+        // fixed-depth behavior). When set, IterativeSearch returns the best move from
+        // the last completed iteration once this budget is exceeded.
+        public long SearchDeadlineMs;
         // SearchScore is the alpha returned by the root search, from the searching
         // side's POV in centipawns. This is what UCI consumers (Cute Chess, Arena)
         // expect as the move's evaluation — distinct from ChessBoard.Score which is
@@ -990,7 +995,7 @@ namespace ChessEngine.Engine // Reverted to original namespace
                 if (FindPlayBookMove(ref bestMove, ChessBoard, CurrentGameBook) == false ||
                     ChessBoard.HalfMoveClock > 90 || ChessBoard.RepeatedMove >= 2)
                 {
-					bestMove = Search.IterativeSearch(ChessBoard, PlyDepthSearched, ref NodesSearched, ref NodesQuiessence, ref pvLine, ref PlyDepthReached, ref RootMovesSearched, CurrentGameBook, out SearchScore);
+					bestMove = Search.IterativeSearch(ChessBoard, PlyDepthSearched, SearchDeadlineMs, ref NodesSearched, ref NodesQuiessence, ref pvLine, ref PlyDepthReached, ref RootMovesSearched, CurrentGameBook, out SearchScore);
                 }
             }
  
