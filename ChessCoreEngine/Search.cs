@@ -57,6 +57,22 @@ namespace ChessEngine.Engine
         private static readonly Position[,] KillerMove = new Position[3,20];
         private static int kIndex;
 
+        // History heuristic: per-(color, from, to) score bumped on quiet beta cutoffs.
+        // EvaluateMoves reads it to seed quiet-move ordering, so moves that have caused
+        // cutoffs at this or higher depths float to the front of the list. Only quiet
+        // moves contribute and consume — captures are already ordered by MVV-LVA.
+        //
+        // Reset at the start of every IterativeSearch so old games' patterns don't pollute
+        // a new search. Across ID iterations within one search the table accumulates —
+        // cutoffs from depth d help order moves at depth d+1.
+        //
+        // Bonus is depth² so deeper cutoffs (which represent more search work) dominate
+        // shallow ones. Capped at HistoryMax to keep the value comparable to capture
+        // scores (queen value ~900; we cap below so history can re-order quiets without
+        // leapfrogging real captures).
+        private const int HistoryMax = 512;
+        private static readonly int[,,] _history = new int[2, 64, 64];
+
         private static int Sort(Position s2, Position s1)
         {
             return (s1.Score).CompareTo(s2.Score);
@@ -97,6 +113,10 @@ namespace ChessEngine.Engine
             _deadlineTicks = deadlineMs > 0
                 ? _searchStartTicks + (long)(deadlineMs * Stopwatch.Frequency / 1000L)
                 : 0;
+
+            // History heuristic table is per-search — wipe state from prior moves so a
+            // position's quiet-move ordering is driven by *this* search's cutoffs.
+            Array.Clear(_history, 0, _history.Length);
 
             searchScore = 0;
             plyDepthReached = 0;
@@ -497,6 +517,18 @@ namespace ChessEngine.Engine
 
                     kIndex = ((kIndex + 1) % 2);
 
+                    // History bump: reward quiet moves that caused cutoffs so they get
+                    // tried earlier next time we hit a similar position. Captures and
+                    // promotions are already ordered well by MVV-LVA + promotion bonus,
+                    // so they don't feed the table.
+                    if (!isCaptureOrEp && !isPromotion)
+                    {
+                        int colorIdx = (examineBoard.WhoseMove == ChessPieceColor.White) ? 0 : 1;
+                        int bumped = _history[colorIdx, move.SrcPosition, move.DstPosition] + depth * depth;
+                        if (bumped > HistoryMax) bumped = HistoryMax;
+                        _history[colorIdx, move.SrcPosition, move.DstPosition] = bumped;
+                    }
+
                     // Beta cutoff: score is a lower bound (true value ≥ beta).
                     TranspositionTable.Store(ttKey, beta, depth, TranspositionTable.FlagLower,
                         move.SrcPosition, move.DstPosition);
@@ -744,6 +776,15 @@ namespace ChessEngine.Engine
                         {
                             move.Score -= 40;
                         }
+                    }
+
+                    // History: nudge quiet moves toward the front of the list when they've
+                    // caused beta cutoffs at earlier ID iterations. Captures already have
+                    // strong MVV-LVA ordering; history would just add noise to them.
+                    if (pieceAttacked == null)
+                    {
+                        int colorIdx = (examineBoard.WhoseMove == ChessPieceColor.White) ? 0 : 1;
+                        move.Score += _history[colorIdx, move.SrcPosition, move.DstPosition];
                     }
 
                     positions.Add(move);
