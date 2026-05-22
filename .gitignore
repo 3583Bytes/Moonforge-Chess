@@ -5,6 +5,10 @@
 publish/
 #arena test gui
 arena/
+# Engine-vs-engine testbed (fastchess, stockfish, match output)
+.testbed/
+# fastchess autosave (machine paths + last-run stats)
+config.json
 
 # Publish artifacts and packages
 *.nupkg

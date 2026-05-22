@@ -320,6 +320,7 @@ namespace ChessEngine.Engine
             }
 
             byte bestSrc = 0, bestDst = 0;
+            int legalMoveCount = 0;
 
             foreach (Position move in positions)
             {
@@ -352,7 +353,58 @@ namespace ChessEngine.Engine
                     }
                 }
 
-                int value = -AlphaBeta(board, (byte)(depth - 1), -beta, -alpha, ref nodesSearched, ref nodesQuiessence, ref pvChild, extended, true);
+                // Late Move Reductions. Move ordering above already floats the
+                // tactically interesting moves to the front (TT move, captures,
+                // killers). The remaining quiet moves are unlikely to be best
+                // — search them at reduced depth, and only re-search at full
+                // depth if the reduced search beats alpha.
+                //
+                // Skip reduction for moves too tactically loaded to gamble on:
+                //   * captures (incl. en passant — pawn moving off its file
+                //     while the dst square is empty)
+                //   * promotions
+                //   * we're already in check (every reply is forced)
+                //   * the move gives check
+                //   * killer move (EvaluateMoves tags these with Score == 5000
+                //     and `continue`s past every other bonus, so the equality
+                //     check is exact)
+                Piece movingPiece = examineBoard.Squares[move.SrcPosition].Piece;
+                bool isCapture = examineBoard.Squares[move.DstPosition].Piece != null;
+                bool isPawnMove = movingPiece.PieceType == ChessPieceType.Pawn;
+                bool isCaptureOrEp = isCapture
+                    || (isPawnMove && (move.SrcPosition & 7) != (move.DstPosition & 7));
+                bool isPromotion = isPawnMove
+                    && (move.DstPosition < 8 || move.DstPosition >= 56);
+                bool inCheck = examineBoard.WhiteCheck || examineBoard.BlackCheck;
+                bool givesCheck = examineBoard.WhoseMove == ChessPieceColor.White
+                    ? board.BlackCheck
+                    : board.WhiteCheck;
+                bool isKiller = move.Score == 5000;
+
+                int reduction = 0;
+                if (depth >= 3
+                    && legalMoveCount >= 3
+                    && !isCaptureOrEp
+                    && !isPromotion
+                    && !inCheck
+                    && !givesCheck
+                    && !isKiller)
+                {
+                    reduction = legalMoveCount >= 6 ? 2 : 1;
+                    if (reduction >= depth) reduction = depth - 1;
+                }
+
+                legalMoveCount++;
+
+                int value = -AlphaBeta(board, (byte)(depth - 1 - reduction), -beta, -alpha, ref nodesSearched, ref nodesQuiessence, ref pvChild, extended, true);
+
+                // Verify a reduced search that beat alpha at full depth before
+                // trusting it — the reduction is a heuristic, not a proof.
+                if (reduction > 0 && value > alpha)
+                {
+                    pvChild = new List<Position>();
+                    value = -AlphaBeta(board, (byte)(depth - 1), -beta, -alpha, ref nodesSearched, ref nodesQuiessence, ref pvChild, extended, true);
+                }
 
                 if (value >= beta)
                 {
