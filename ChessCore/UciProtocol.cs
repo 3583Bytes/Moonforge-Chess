@@ -13,7 +13,7 @@ namespace ChessCore
         // is the single source of truth. .NET 8 appends "+<commit-sha>" to InformationalVersion
         // when a .git folder is present — strip that so `id name` stays clean.
         private static readonly string Version = ReadAssemblyVersion();
-        private static readonly string EngineName = "ChessCore " + Version;
+        private static readonly string EngineName = "Moonforge Chess " + Version;
         private const string EngineAuthor = "Adam Berent";
         private const string StartFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
@@ -436,7 +436,7 @@ namespace ChessCore
 
         private void HandleCompiler()
         {
-            Send("info string ChessCore " + Version);
+            Send("info string Moonforge Chess " + Version);
             Send("info string .NET runtime: " + Environment.Version);
             Send("info string Framework: " + System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription);
             Send("info string OS: " + System.Runtime.InteropServices.RuntimeInformation.OSDescription);

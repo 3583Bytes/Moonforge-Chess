@@ -200,7 +200,7 @@ It will sit silently waiting for input. Then (your input has no prefix; engine o
 
 ```
 uci
-> id name ChessCore 1.1.0
+> id name Moonforge Chess 1.1.0
 > id author Adam Berent
 > uciok
 
