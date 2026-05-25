@@ -81,16 +81,20 @@ jobs:
 
           # Archive the published binary directly from its publish dir with a flat layout.
           # Don't stage into the working directory — `ChessCore` collides with the project folder.
+          # The csproj is still named ChessCore, so publish emits ChessCore[.exe]; rename to the
+          # release brand (moonforge-chess) before archiving so the file users see matches the archive.
           pack() {
             local variant="$1"      # self-contained | framework-dependent
-            local stem="ChessCore-${{ matrix.rid }}-${variant}"
+            local stem="moonforge-chess-${{ matrix.rid }}-${variant}"
             local src="publish/${variant}/ChessCore${{ matrix.ext }}"
+            local renamed="publish/${variant}/moonforge-chess${{ matrix.ext }}"
             test -f "$src"  # fail fast if publish didn't produce a single file
+            mv "$src" "$renamed"
 
             if [ "${{ matrix.archive }}" = "zip" ]; then
-              zip -j -9 "artifacts/${stem}.zip" "$src"            # -j = junk paths
+              zip -j -9 "artifacts/${stem}.zip" "$renamed"        # -j = junk paths
             else
-              tar -czf "artifacts/${stem}.tar.gz" -C "$(dirname "$src")" "$(basename "$src")"
+              tar -czf "artifacts/${stem}.tar.gz" -C "$(dirname "$renamed")" "$(basename "$renamed")"
             fi
           }
 
@@ -101,7 +105,7 @@ jobs:
       - name: Upload archives
         uses: actions/upload-artifact@v4
         with:
-          name: ChessCore-${{ matrix.rid }}
+          name: moonforge-chess-${{ matrix.rid }}
           path: artifacts/*
           if-no-files-found: error
 

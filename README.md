@@ -2,7 +2,7 @@
 
 UCI-compatible chess engine written in C# / .NET 10.
 
-ChessCore implements the [Universal Chess Interface](https://backscattering.de/chess/uci/) protocol on stdin/stdout, so it plugs into any modern chess GUI — [Arena](http://www.playwitharena.de/), [Cute Chess](https://cutechess.com/), [BanksiaGUI](https://banksiagui.com/), [Nibbler](https://github.com/rooklift/nibbler), the ChessBase family, [lichess-bot](https://github.com/lichess-bot-devs/lichess-bot), etc. Earlier versions spoke the XBoard/WinBoard protocol; that has been replaced by UCI as of v1.1.
+Moonforge Chess implements the [Universal Chess Interface](https://backscattering.de/chess/uci/) protocol on stdin/stdout, so it plugs into any modern chess GUI — [Arena](http://www.playwitharena.de/), [Cute Chess](https://cutechess.com/), [BanksiaGUI](https://banksiagui.com/), [Nibbler](https://github.com/rooklift/nibbler), the ChessBase family, [lichess-bot](https://github.com/lichess-bot-devs/lichess-bot), etc. Earlier versions spoke the XBoard/WinBoard protocol; that has been replaced by UCI as of v1.1.
 
 ## What's inside the engine
 
@@ -55,8 +55,8 @@ moved them, see [`BASELINE.md`](BASELINE.md).
 
 Each tagged release on the [Releases page](https://github.com/3583Bytes/ChessCore/releases) ships with prebuilt single-file executables for Windows, Linux, and macOS (both Intel and Apple Silicon). Two flavors per platform:
 
-- **`ChessCore-<platform>-self-contained.{zip,tar.gz}`** — bundles the .NET 10 runtime inside the binary (~60–70 MB). Nothing else needed on the target machine; download, extract, run.
-- **`ChessCore-<platform>-framework-dependent.{zip,tar.gz}`** — small (~5 MB) but requires the .NET 10 runtime already installed on the target machine. Use this if disk space matters or you already have .NET.
+- **`moonforge-chess-<platform>-self-contained.{zip,tar.gz}`** — bundles the .NET 10 runtime inside the binary (~60–70 MB). Nothing else needed on the target machine; download, extract, run. The archive contains a single executable named `moonforge-chess` (`moonforge-chess.exe` on Windows).
+- **`moonforge-chess-<platform>-framework-dependent.{zip,tar.gz}`** — small (~5 MB) but requires the .NET 10 runtime already installed on the target machine. Use this if disk space matters or you already have .NET.
 
 A `SHA256SUMS.txt` is published alongside each release so you can verify downloads.
 
@@ -81,12 +81,12 @@ Expected output: an `id name` / `id author` / `uciok` block, an `info` line, the
 
 ## Playing the engine in a GUI
 
-For real play you want a graphical board, a clock, and move-list panes. ChessCore is a standard UCI engine, so any UCI-compatible chess GUI will host it. Two free, well-supported options:
+For real play you want a graphical board, a clock, and move-list panes. Moonforge Chess is a standard UCI engine, so any UCI-compatible chess GUI will host it. Two free, well-supported options:
 
 - **[Arena](http://www.playwitharena.de/)** — Windows-first, beginner-friendly. Recommended if you're on Windows.
 - **[Cute Chess](https://cutechess.com/)** — cross-platform (Windows / macOS / Linux), good for engine-vs-engine matches.
 
-The setup is the same idea in either: publish ChessCore as a single executable, then point the GUI at it.
+The setup is the same idea in either: publish Moonforge Chess as a single executable, then point the GUI at it.
 
 ### Step 1 — Publish a single-file engine binary
 
@@ -109,17 +109,17 @@ The resulting binary lives at:
 ChessCore/bin/Release/net10.0/<rid>/publish/ChessCore[.exe]
 ```
 
-(`<rid>` is `win-x64`, `linux-x64`, `osx-x64`, etc.) Copy this file somewhere stable — your `~/Engines/` folder or `C:\Engines\ChessCore\`, say — because the GUI will remember its path.
+(`<rid>` is `win-x64`, `linux-x64`, `osx-x64`, etc.) Copy this file somewhere stable — your `~/Engines/` folder or `C:\Engines\Moonforge\`, say — because the GUI will remember its path.
 
 > Why publish instead of `dotnet run`? GUIs invoke the engine path many times per second and expect a single executable they can spawn quickly. `dotnet run` rebuilds and has noisy first-line output; published binaries start clean and fast.
 
 ### Step 2a — Hooking it into Arena
 
 1. Open Arena. From the menu bar, choose **Engines → Install New Engine…**.
-2. In the file picker, navigate to `ChessCore.exe` and open it.
+2. In the file picker, navigate to `ChessCore.exe` (the binary produced by `dotnet publish` — releases downloaded from GitHub are named `moonforge-chess.exe`) and open it.
 3. Arena asks **"Choose the type of the chess engine"** — select **UCI**.
 4. Arena will spawn the engine briefly to read its `id` / `option` info, then add it to the engine list.
-5. To play a game against it: **Engines → Manage…** → highlight ChessCore → click **Player B** (or **A**) to assign it a side. Close the dialog, then **Game → New** to start.
+5. To play a game against it: **Engines → Manage…** → highlight Moonforge Chess → click **Player B** (or **A**) to assign it a side. Close the dialog, then **Game → New** to start.
 6. To watch what the engine is doing while it thinks, open **View → Output (Engine 1/2)** — you'll see the `info depth … score cp … bestmove …` stream live.
 
 ### Step 2b — Hooking it into Cute Chess
@@ -127,12 +127,12 @@ ChessCore/bin/Release/net10.0/<rid>/publish/ChessCore[.exe]
 1. Open Cute Chess. **Tools → Settings… → Engines** tab.
 2. Click **Add…**.
 3. Fill in:
-    - **Name**: `ChessCore`
-    - **Command**: full path to the published binary (e.g. `C:\Engines\ChessCore\ChessCore.exe` or `/home/you/engines/ChessCore`)
+    - **Name**: `Moonforge Chess`
+    - **Command**: full path to the published binary (e.g. `C:\Engines\Moonforge\ChessCore.exe` or `/home/you/engines/ChessCore`; a release download would be `moonforge-chess.exe` / `moonforge-chess`)
     - **Working Directory**: same folder as the binary
     - **Protocol**: `UCI`
 4. Click **OK** to save, then **OK** to close Settings.
-5. **Game → New…** → set one side to **CPU** and pick `ChessCore` from the engine dropdown. Click **OK** to start.
+5. **Game → New…** → set one side to **CPU** and pick `Moonforge Chess` from the engine dropdown. Click **OK** to start.
 
 ### Step 3 — Confirm it's working
 
@@ -146,16 +146,16 @@ If nothing happens for more than a few seconds and no `info` lines appear, the G
 
 ### Time controls and difficulty
 
-Pick a time control in the GUI's "New Game" dialog rather than configuring depth here. ChessCore reads `wtime` / `btime` / `winc` / `binc` from `go` and maps the remaining budget to a search depth (3–7 plies). Reasonable starting points:
+Pick a time control in the GUI's "New Game" dialog rather than configuring depth here. Moonforge Chess reads `wtime` / `btime` / `winc` / `binc` from `go` and maps the remaining budget to a search depth (3–7 plies). Reasonable starting points:
 
 - **Casual game**: 5 minutes per side with a 3-second increment.
-- **Quick test**: 1 minute per side, no increment — you'll see ChessCore at depth 3–4.
+- **Quick test**: 1 minute per side, no increment — you'll see Moonforge Chess at depth 3–4.
 - **Engine-vs-engine match**: pair it against another lightweight engine in Cute Chess's tournament mode (**Tools → New Tournament…**).
 
 ### Known interaction quirks
 
-- **"Stop" isn't honored mid-search.** ChessCore runs search synchronously, so if you hit "Force Move" or "Move Now" in the GUI, the engine will finish its current iteration before returning. For short time controls this is usually invisible.
-- **No `Hash` or `Threads` options.** ChessCore advertises no UCI options at startup, so the engine-options pane in the GUI will be empty. There's nothing to tune.
+- **"Stop" isn't honored mid-search.** Moonforge Chess runs search synchronously, so if you hit "Force Move" or "Move Now" in the GUI, the engine will finish its current iteration before returning. For short time controls this is usually invisible.
+- **No `Hash` or `Threads` options.** Moonforge Chess advertises no UCI options at startup, so the engine-options pane in the GUI will be empty. There's nothing to tune.
 - **No pondering.** The engine ignores `ponderhit` and `go ponder`. If your GUI has "Engine Pondering" enabled, leave it off — it won't hurt but it won't help either.
 
 ## Debug commands at the terminal
@@ -170,7 +170,7 @@ When running the engine by hand (no GUI attached), a few non-standard commands a
 | `bench` | Run a fixed search benchmark over six well-known test positions at depth 5 and report total nodes / NPS / time. Use this to spot performance regressions. |
 | `flip` | Mirror the board top-to-bottom and swap every piece's color. Mostly useful for verifying evaluation symmetry. |
 | `compiler` | Print the .NET runtime version, framework, OS, and process architecture. |
-| `<move>` | A bare move like `e2e4` or `e7e8q` is applied to the engine's current board state without needing a full `position` command. This is a ChessCore convenience and is not part of standard UCI; no GUI sends bare moves, so it only fires at a terminal. |
+| `<move>` | A bare move like `e2e4` or `e7e8q` is applied to the engine's current board state without needing a full `position` command. This is a Moonforge Chess convenience and is not part of standard UCI; no GUI sends bare moves, so it only fires at a terminal. |
 
 ## Playing the engine manually from a terminal
 
@@ -178,7 +178,7 @@ You don't need a GUI to play. Start the engine with `dotnet run --project ChessC
 
 ### Move syntax
 
-ChessCore expects long algebraic notation — no piece letters, no `x`, no `+`, no `#`. Just source square + destination square.
+Moonforge Chess expects long algebraic notation — no piece letters, no `x`, no `+`, no `#`. Just source square + destination square.
 
 | Move | What it looks like |
 |---|---|
@@ -225,7 +225,7 @@ show
 
 That's the entire loop: type your move (bare long-algebraic), type `go depth N`, read the engine's reply. The engine maintains its own board state, so you do **not** need to retype the full game history.
 
-For strict UCI clients (or if you just prefer the formal form), the equivalent of `e2e4` is `position startpos moves e2e4`, and to continue you re-send the full move list each turn. That's the only form a real chess GUI uses; bare moves are a ChessCore terminal-only shortcut.
+For strict UCI clients (or if you just prefer the formal form), the equivalent of `e2e4` is `position startpos moves e2e4`, and to continue you re-send the full move list each turn. That's the only form a real chess GUI uses; bare moves are a Moonforge Chess terminal-only shortcut.
 
 When you're done, type `quit`.
 
