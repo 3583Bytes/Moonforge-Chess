@@ -342,6 +342,30 @@ namespace ChessEngine.Engine
                 return ttScore;
             int origAlpha = alpha;
 
+            // Reverse futility pruning (a.k.a. static null move pruning). At shallow
+            // remaining depth, if the static evaluation is so far above beta that
+            // even a per-ply margin (the most the opponent could plausibly claw back
+            // in `depth` plies of capturing) still leaves us above beta, return
+            // immediately. We never search anything — just trust the eval as a
+            // conservative lower bound on the true score.
+            //
+            // Skip when:
+            //   * in check (the eval doesn't reflect tactical reality when the king
+            //     is under attack — a forced move may flip the score)
+            //   * depth too high (the per-ply margin would have to be enormous to
+            //     stay conservative — the gain doesn't pay for the rare false cutoff)
+            //   * |beta| near mate (eval can't bound mate scores correctly)
+            if (depth <= 6
+                && !(examineBoard.WhiteCheck || examineBoard.BlackCheck)
+                && Math.Abs(beta) < 30000)
+            {
+                Evaluation.EvaluateBoardScore(examineBoard);
+                int rfpStaticEval = SideToMoveScore(examineBoard.Score, examineBoard.WhoseMove);
+                int rfpMargin = 100 * depth;
+                if (rfpStaticEval - rfpMargin >= beta)
+                    return beta;
+            }
+
             // Null move pruning. Hand the opponent a free move; if even then the
             // search comes back >= beta, the position is too good for us to need
             // to search properly — the opponent can't refute it from here.

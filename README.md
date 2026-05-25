@@ -12,13 +12,16 @@ component can be traced end-to-end.
 
 **Search** (`Search.cs`)
 
-- Negamax alpha-beta with iterative deepening at the root
-- Killer-move heuristic (two slots per ply) for move ordering
-- Check extension at the search horizon
-- Null move pruning (R=2), skipped in check / at low depth / in low-piece endings (zugzwang)
+- Negamax alpha-beta, fail-hard, with iterative deepening at the root
+- Time-bounded ID: when a wall-clock deadline is set, the search aborts the next iteration once the budget is spent and returns the best move from the last fully-completed depth
+- Null move pruning (R=2), skipped in check / at low depth / in low-piece endings (zugzwang) / when |β| is near mate
+- Reverse futility pruning (a.k.a. static null move pruning) at depth ≤ 6: if `staticEval − 100·depth ≥ β`, return immediately. Skipped in check and near mate scores.
+- Late move reductions: at depth ≥ 3, quiet non-check moves past the third ordered move are searched at reduced depth (1 ply, or 2 plies past the sixth move). Reduced searches that beat α are re-searched at full depth.
+- Check extension at the search horizon (once, to avoid runaway recursion)
+- Move ordering: TT move first, then captures (MVV-LVA), then killer moves (two slots per ply), then quiet moves seeded by a per-(color, from, to) history heuristic. History is bumped on quiet beta cutoffs by depth², capped to stay below capture scores.
+- Transposition table (~1M entries, ~24 MB), depth-preferred replacement, exact/lower/upper bound flags
 - Quiescence search with stand-pat + SEE pruning on captures
 - Quiescence also considers non-capture *knight* checks at its first ply — catches the knight-fork class of horizon tactic
-- Transposition table (~1M entries, ~24 MB), depth-preferred replacement, TT-move first in ordering
 - Mate detection with depth-adjusted scores (shorter mates score higher)
 
 **Evaluation** (`Evaluation.cs`)
@@ -45,7 +48,8 @@ component can be traced end-to-end.
 
 **Time controls and opening book**
 
-- `go wtime/btime/winc/binc/movestogo` is mapped to a search ply at the start of the search; the engine does not poll a deadline mid-search
+- `go wtime/btime/winc/binc/movestogo` is mapped to a wall-clock budget at the start of the search; the search polls a deadline every ~2048 nodes and aborts the next iteration cleanly when the budget is spent (the best move from the last completed depth is returned)
+- `go depth N` and `go movetime ms` bypass the deadline mapping — the former runs to a fixed ply, the latter sets the deadline directly
 - Bundled opening book (~thousands of positions) consulted before search; book hits return in microseconds
 
 For reproducible search-performance numbers and a record of which changes
