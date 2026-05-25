@@ -509,6 +509,29 @@ namespace ChessEngine.Engine
                     : board.WhiteCheck;
                 bool isKiller = move.Score == 5000;
 
+                // Late move pruning. At shallow remaining depth, after we've already
+                // tried enough quiet moves without raising alpha, skip the rest of
+                // the quiets outright. The move ordering above (TT move, captures,
+                // killers, history-seeded quiets) means anything that hasn't beaten
+                // alpha by move N + depth² probably won't. Distinct from LMR (which
+                // *reduces depth* on late quiet moves); LMP just throws them out.
+                //
+                // Same tactical exclusions as LMR — never prune captures, promotions,
+                // killers, or any move that would silence a check or give one.
+                // LMP fires at depth ≤ 3 to complement LMR (which only fires at
+                // depth ≥ 3), so the two together cover late quiets at every depth.
+                if (depth <= 3
+                    && !inCheck
+                    && !isCaptureOrEp
+                    && !isPromotion
+                    && !givesCheck
+                    && !isKiller
+                    && legalMoveCount >= 6 + depth * depth)
+                {
+                    legalMoveCount++;
+                    continue;
+                }
+
                 int reduction = 0;
                 if (depth >= 3
                     && legalMoveCount >= 3
