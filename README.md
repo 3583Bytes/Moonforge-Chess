@@ -7,10 +7,17 @@ Moonforge Chess implements the [Universal Chess Interface](https://backscatterin
 ## What's inside the engine
 
 The engine is a deliberately readable implementation — single-threaded, no
-bitboards, no machine-learned evaluation. Code is small enough that every
-component can be traced end-to-end.
+machine-learned evaluation. Code is small enough that every component can be
+traced end-to-end.
 
-**Search** (`Search.cs`)
+The board uses a **bitboard** representation (`Position`, twelve piece bitboards +
+occupancy) with make/unmake and an incrementally-updated Zobrist hash. Move
+generation is bitboard-based (`MoveGen` / `Bitboards`, classical-ray sliding
+attacks). Evaluation reuses the original positional terms unchanged, fed from the
+bitboard position. Move generation is validated against the standard perft suite
+(initial position, Kiwipete, and positions 3–6) to community-verified node counts.
+
+**Search** (`BitboardSearch.cs`)
 
 - Negamax alpha-beta, fail-hard, with iterative deepening at the root
 - Time-bounded ID: when a wall-clock deadline is set, the search aborts the next iteration once the budget is spent and returns the best move from the last fully-completed depth
@@ -34,10 +41,15 @@ component can be traced end-to-end.
 - Tempo bonus, castled bonus, lost-castling-rights penalty
 - Insufficient-material draw detection (handles KNvKN, KBvKB)
 
-**Move generation** (`PieceMoves.cs` / `PieceValidMoves.cs`)
+**Move generation** (`Bitboards.cs` / `MoveGen.cs` / `Position.cs`)
 
-- Precomputed direction tables per piece type (built once at engine startup)
-- Per-piece valid-move lists + per-color attack boards rebuilt after each board mutation
+- Bitboard board state: twelve piece bitboards + per-color occupancy, with a
+  maintained piece-on-square view for evaluation/FEN
+- Precomputed knight/king/pawn attack tables; classical-ray sliding-piece attacks
+  (portable — no BMI2/PEXT dependency)
+- Make/unmake with incremental Zobrist hashing; legality by king-safety filter
+- Pseudo-legal generation + `IsSquareAttacked`; perft-verified incl. en passant,
+  promotions, castling, and pins
 - Validated by perft from the start position through depth 5 (4,865,609 nodes)
 
 **Position state** (`Board.cs`, `Zobrist.cs`)

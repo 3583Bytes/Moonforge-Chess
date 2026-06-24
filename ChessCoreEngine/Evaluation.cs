@@ -4,10 +4,10 @@ namespace ChessEngine.Engine
 {
     internal static class Evaluation
     {
-        private static readonly short[] blackPawnCount = new short[8];
-        private static readonly short[] whitePawnCount = new short[8];
+        internal static readonly short[] blackPawnCount = new short[8];
+        internal static readonly short[] whitePawnCount = new short[8];
       
-        private static readonly short[] PawnTable = new short[]
+        internal static readonly short[] PawnTable = new short[]
         {
        	     0,  0,  0,  0,  0,  0,  0,  0,
             50, 50, 50, 50, 50, 50, 50, 50,
@@ -19,7 +19,7 @@ namespace ChessEngine.Engine
              0,  0,  0,  0,  0,  0,  0,  0
         };
 
-        private static readonly short[] KnightTable = new short[]
+        internal static readonly short[] KnightTable = new short[]
         {
             -50,-40,-30,-30,-30,-30,-40,-50,
             -40,-20,  0,  0,  0,  0,-20,-40,
@@ -31,7 +31,7 @@ namespace ChessEngine.Engine
             -50,-30,-20,-30,-30,-20,-30,-50,
         };
 
-        private static readonly short[] BishopTable = new short[]
+        internal static readonly short[] BishopTable = new short[]
         {
             -20,-10,-10,-10,-10,-10,-10,-20,
             -10,  0,  0,  0,  0,  0,  0,-10,
@@ -43,7 +43,7 @@ namespace ChessEngine.Engine
             -20,-10,-40,-10,-10,-40,-10,-20,
         };
 
-        private static readonly short[] KingTable = new short[]
+        internal static readonly short[] KingTable = new short[]
         {
           -30, -40, -40, -50, -50, -40, -40, -30,
           -30, -40, -40, -50, -50, -40, -40, -30,
@@ -55,7 +55,7 @@ namespace ChessEngine.Engine
            20,  30,  10,   0,   0,  10,  30,  20
         };
 
-        private static readonly short[] KingTableEndGame = new short[]
+        internal static readonly short[] KingTableEndGame = new short[]
         {
             -50,-40,-30,-20,-20,-30,-40,-50,
             -30,-20,-10,  0,  0,-10,-20,-30,
@@ -650,7 +650,7 @@ namespace ChessEngine.Engine
         // 4, 7, and 9 (deep queen sorties + exposed king). Endgame is excluded;
         // king activity is wanted there. Returns a score in the king-owner's
         // POV — caller applies sign for white/black.
-        private static readonly short[] KingZoneAttackPenalty = { 0, -4, -12, -24, -40, -60, -80, -100 };
+        internal static readonly short[] KingZoneAttackPenalty = { 0, -4, -12, -24, -40, -60, -80, -100 };
 
         private static int EvaluateKingZoneAttacks(Board board, byte kingPos, ChessPieceColor color)
         {

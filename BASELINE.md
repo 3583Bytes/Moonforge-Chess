@@ -17,6 +17,79 @@ dotnet build ChessCore.sln -c Release -nologo
 Take the median of the **total** line across the runs. Single runs lie because of
 JIT warmup and OS scheduling jitter; the median of five is stable enough.
 
+## Pre-bitboard baseline (macOS / arm64, 2026-06-22)
+
+Reference captured on this dev machine (Apple Silicon, .NET 10.0.301) immediately
+**before** the bitboard rewrite, so the rewrite's speedup can be measured honestly
+on the same hardware. The Windows numbers below are not comparable across platform
+or commit.
+
+```
+bench (median of 5, deterministic node count):
+  total nodes  76_584   (identical across all 5 runs)
+  total time   ~595 ms  (median; range 595–693 ms)
+  total nps    ~129_000 (median)
+
+perft depth 5 (initial position, 4_865_609 nodes):
+  ~8 s wall-clock via the test harness (deep-clone-per-node + from-scratch Zobrist)
+  ≈ 600K nodes/sec pure move generation
+```
+
+The bitboard rewrite targets the per-node cost here: deep `FastCopy` per move,
+`Zobrist.ComputeHash` from scratch per move, and legality-by-full-regeneration.
+
+> Note: the standard perft suite (`PerftBaselineTests.StandardPositions_*`) passes
+> on Kiwipete / Position 4 / 5 / 6 but Position 3 is `[Ignore]`d — the mailbox
+> generator has a known en-passant-into-check legality bug there. The bitboard
+> core must pass Position 3 and un-ignore those cases.
+
+## Post-bitboard-wiring (macOS / arm64, 2026-06-22)
+
+After wiring the bitboard search (`BitboardSearch`) + bitboard perft into `Engine`,
+same machine, Release, median of 3:
+
+```
+bench (deterministic node count):
+  total nodes  44_505   (identical across runs; same per-position depths as the
+                          pre-bitboard baseline: Kiwipete 5, Endgame 6, BK.01 5,
+                          KRk 7, Promotion 3)
+  total time   ~320 ms   (vs ~595 ms pre-bitboard → ~1.85× faster wall-clock)
+  total nps    ~138_000
+```
+
+Node count dropped ~42% (76_584 → 44_505) at identical depths: cleaner
+(self-consistent fresh-load) evaluation + native MVV-LVA/killer/history ordering
+prune better.
+
+**With native bitboard evaluation** (`BitboardEvalNative.Score` — no `Board`
+projection, no `GenerateValidMoves` per node; validated to match the legacy
+fresh-load score exactly):
+
+```
+bench: total nodes 44_505 (unchanged — identical eval values → identical tree)
+       total time  ~245 ms
+       total nps   ~181_000
+```
+
+Cumulative vs the pre-bitboard baseline: **~2.4× faster wall-clock** (595 → 245 ms),
+**~1.4× higher NPS** (129K → 181K), **~42% fewer nodes** at identical depths.
+
+Perft runs on the bitboard core: depth-5 initial position (4_865_609 nodes) and the
+full standard suite incl. **Position 3** (the en-passant case the old generator
+failed) all pass.
+
+Architecture after the rewrite: search (`BitboardSearch`), move generation
+(`MoveGen`/`Bitboards`), evaluation (`BitboardEvalNative`), perft, and mate
+detection are all bitboard-native (make/unmake `Position`, incremental Zobrist).
+The mailbox `Board`/`PieceValidMoves`/`Evaluation` remain only as the engine's
+game-state/IO layer (FEN, PGN, UCI, move history) and as the test oracle
+(`BitboardEval.ScoreViaLegacyGen`) — they are no longer on the search hot path.
+
+Further speedup headroom (not yet done): the hot path still allocates per node
+(move lists, signal arrays) and filters legality by make/unmake; reusing buffers
+and a fully-legal generator would close more of the gap to the raw move generator's
+~18M nps.
+
 ## Current baseline
 
 Captured on .NET 10.0.7 / Windows 11 x64 after adding king-zone-attack eval

@@ -715,28 +715,6 @@ namespace ChessEngine.Engine
 
         #region InternalMethods
 
-        //Fast Copy
-        internal Board FastCopy()
-        {
-            Board clonedBoard = new Board(Squares);
-
-            clonedBoard.EndGamePhase = EndGamePhase;
-            clonedBoard.WhoseMove = WhoseMove;
-            clonedBoard.MoveCount = MoveCount;
-            clonedBoard.HalfMoveClock = HalfMoveClock;
-            clonedBoard.ZobristHash = ZobristHash;
-            clonedBoard.BlackCastled = BlackCastled;
-            clonedBoard.WhiteCastled = WhiteCastled;
-
-            clonedBoard.WhiteCanCastle = WhiteCanCastle;
-            clonedBoard.BlackCanCastle = BlackCanCastle;
-
-            WhiteAttackBoard = new bool[64];
-            BlackAttackBoard = new bool[64];
-
-            return clonedBoard;
-        }
-
         internal static MoveContent MovePiece(Board board, byte srcPosition, byte dstPosition, ChessPieceType promoteToPiece)
         {
             Piece piece = board.Squares[srcPosition].Piece;

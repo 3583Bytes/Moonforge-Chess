@@ -273,15 +273,26 @@ namespace ChessEngine.Engine // Reverted to original namespace
 
         private static bool CheckForMate(ChessPieceColor whosTurn, ref Board chessBoard)
         {
-            Search.SearchForMate(whosTurn, chessBoard, ref chessBoard.BlackMate,
-                                 ref chessBoard.WhiteMate, ref chessBoard.StaleMate);
+            // Bitboard mate/stalemate detection: no legal move + in check = checkmate
+            // for the side to move; no legal move + not in check = stalemate.
+            Position pos = Position.FromFen(Board.Fen(false, chessBoard));
+            var moves = new List<Move>(64);
+            MoveGen.GenerateLegal(pos, moves);
 
-            if (chessBoard.BlackMate || chessBoard.WhiteMate || chessBoard.StaleMate)
+            if (moves.Count > 0)
+                return false;
+
+            if (MoveGen.InCheck(pos, pos.SideToMove))
             {
-                return true;
+                if (whosTurn == ChessPieceColor.Black) chessBoard.BlackMate = true;
+                else chessBoard.WhiteMate = true;
+            }
+            else
+            {
+                chessBoard.StaleMate = true;
             }
 
-            return false;
+            return true;
         }
 
         private static bool FindPlayBookMove(ref MoveContent bestMove, Board chessBoard, IEnumerable<OpeningMove> openingBook)
@@ -953,6 +964,30 @@ namespace ChessEngine.Engine // Reverted to original namespace
 
         #region Search
 
+        // Runs the bitboard search from the current board and returns the chosen move
+        // as a MoveContent (with the moving piece's identity), so the existing
+        // move-application path in AiPonderMove is unchanged. The bitboard search is
+        // the live engine; the legacy mailbox Search is retained only as reference.
+        private MoveContent BitboardPonderMove(out ChessPieceType promoteTo)
+        {
+            Position pos = Position.FromFen(Board.Fen(false, ChessBoard));
+            Move m = BitboardSearch.FindBestMove(pos, PlyDepthSearched, SearchDeadlineMs,
+                                                 out SearchScore, out int depthReached);
+
+            PlyDepthReached = (byte)depthReached;
+            NodesSearched = (int)BitboardSearch.NodesSearched;
+            NodesQuiessence = (int)BitboardSearch.NodesQuiescence;
+            pvLine = m.ToString();
+            promoteTo = m.IsPromotion ? m.Promotion : ChessPieceType.Queen;
+
+            Piece mover = ChessBoard.Squares[m.From].Piece;
+            var mc = new MoveContent
+            {
+                MovingPiecePrimary = new PieceMoving(mover.PieceColor, mover.PieceType, mover.Moved, m.From, m.To)
+            };
+            return mc;
+        }
+
         public void AiPonderMove()
         {
             Thinking = true;
@@ -987,7 +1022,8 @@ namespace ChessEngine.Engine // Reverted to original namespace
             }
 
             MoveContent bestMove = new MoveContent();
-           
+            ChessPieceType promoteTo = ChessPieceType.Queen;
+
             //If there is no playbook move search for the best move
             if (FindPlayBookMove(ref bestMove, ChessBoard, OpeningBook) == false
                 || ChessBoard.HalfMoveClock > 90 || ChessBoard.RepeatedMove >= 2)
@@ -995,7 +1031,7 @@ namespace ChessEngine.Engine // Reverted to original namespace
                 if (FindPlayBookMove(ref bestMove, ChessBoard, CurrentGameBook) == false ||
                     ChessBoard.HalfMoveClock > 90 || ChessBoard.RepeatedMove >= 2)
                 {
-					bestMove = Search.IterativeSearch(ChessBoard, PlyDepthSearched, SearchDeadlineMs, ref NodesSearched, ref NodesQuiessence, ref pvLine, ref PlyDepthReached, ref RootMovesSearched, CurrentGameBook, out SearchScore);
+					bestMove = BitboardPonderMove(out promoteTo);
                 }
             }
  
@@ -1004,7 +1040,7 @@ namespace ChessEngine.Engine // Reverted to original namespace
 
             RootMovesSearched = (byte)resultBoards.Positions.Count;
 
-            Board.MovePiece(ChessBoard, bestMove.MovingPiecePrimary.SrcPosition, bestMove.MovingPiecePrimary.DstPosition, ChessPieceType.Queen);
+            Board.MovePiece(ChessBoard, bestMove.MovingPiecePrimary.SrcPosition, bestMove.MovingPiecePrimary.DstPosition, promoteTo);
 
             ChessBoard.LastMove.GeneratePGNString(ChessBoard);
 
@@ -1054,7 +1090,18 @@ namespace ChessEngine.Engine // Reverted to original namespace
 
         public PerformanceTest.PerformanceResult RunPerformanceTest(int depth=5)
         {
-            return PerformanceTest.RunPerfTest(depth, ChessBoard);
+            // Perft now runs on the bitboard core (correct en passant / promotions /
+            // pins), replacing the legacy mailbox PerformanceTest.
+            Position pos = Position.FromFen(Board.Fen(false, ChessBoard));
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            long nodes = MoveGen.Perft(pos, depth);
+            sw.Stop();
+            return new PerformanceTest.PerformanceResult
+            {
+                Depth = depth,
+                Nodes = nodes,
+                TimeSpan = sw.Elapsed
+            };
         }
 
         #endregion

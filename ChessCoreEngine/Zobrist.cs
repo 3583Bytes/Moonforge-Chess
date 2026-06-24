@@ -96,5 +96,14 @@ namespace ChessEngine.Engine
 
             return h;
         }
+
+        // Raw sub-key accessors for the bitboard core's incremental hashing.
+        // The bitboard `Position` maintains its hash by XOR-ing these in/out as
+        // pieces move, rather than recomputing from scratch. Castling rights there
+        // use a full 4-bit KQkq mask (the 16-entry table accommodates it).
+        internal static ulong PieceKey(int colorIdx, int typeIdx, int sq) => PieceHash[colorIdx, typeIdx, sq];
+        internal static ulong SideKey() => SideToMoveHash;
+        internal static ulong CastleKey(int mask) => CastlingHash[mask];
+        internal static ulong EnPassantFileKey(int file) => EnPassantFileHash[file];
     }
 }
