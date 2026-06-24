@@ -112,6 +112,9 @@ jobs:
   nuget:
     name: Pack & publish library packages
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # mint the OIDC token for NuGet.org trusted publishing
+      contents: read    # checkout
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -148,16 +151,20 @@ jobs:
           sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"${{ steps.ver.outputs.version }}\"/" "$PKG/package.json"
           ( cd unity && zip -r -9 "../nuget-out/moonforge-chess-unity-${{ steps.ver.outputs.version }}.zip" com.adamberent.moonforge-chess )
 
+      # Trusted Publishing (OIDC): exchanges the workflow's OIDC token for a
+      # short-lived NuGet.org API key — no long-lived secret to store or rotate.
+      # Requires a trusted-publishing policy on NuGet.org bound to this repo +
+      # workflow file (release.yml) for user 3583Bytes.
+      - name: NuGet login (trusted publishing)
+        id: nuget-login
+        uses: NuGet/login@v1
+        with:
+          user: 3583Bytes
+
       - name: Push to NuGet.org
-        env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: |
-          if [ -z "${NUGET_API_KEY:-}" ]; then
-            echo "NUGET_API_KEY secret not set — skipping push to nuget.org. The .nupkg is still attached to the GitHub Release."
-            exit 0
-          fi
           dotnet nuget push nuget-out/*.nupkg \
-            --api-key "$NUGET_API_KEY" \
+            --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}" \
             --source https://api.nuget.org/v3/index.json \
             --skip-duplicate
 

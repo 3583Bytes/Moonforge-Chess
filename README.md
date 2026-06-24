@@ -380,7 +380,7 @@ The `.github/workflows/release.yml` workflow builds platform binaries automatica
     ```
 4. The workflow builds Windows / Linux / macOS-x64 / macOS-arm64 binaries (each in self-contained and framework-dependent flavors), **packs the `MoonforgeChess.Engine` NuGet package and a Unity UPM zip** (both stamped with the tag version), generates `SHA256SUMS.txt`, and publishes a GitHub Release with auto-generated notes. The `.nupkg` and Unity zip are attached to the release.
 
-> **Publishing to nuget.org**: add a `NUGET_API_KEY` repository secret (Settings → Secrets and variables → Actions). When present, the workflow pushes the package to nuget.org with `--skip-duplicate`; when absent, it skips the push and still attaches the `.nupkg` to the GitHub Release.
+> **Publishing to nuget.org** uses [Trusted Publishing](https://learn.microsoft.com/nuget/nuget-org/trusted-publishing) (OIDC) — no API key/secret to store or rotate. A one-time policy on nuget.org binds the package to this repo + workflow (`release.yml`, user `3583Bytes`); the `nuget` job mints a short-lived key at publish time via `NuGet/login` (`permissions: id-token: write`). The `.nupkg` is also attached to the GitHub Release regardless.
 
 To rerun the workflow against an existing tag without pushing a new one, use the **Run workflow** button on the Actions tab and supply the tag name.
 
