@@ -27,11 +27,15 @@ bitboard position. Move generation is validated against the standard perft suite
 - Check extension at the search horizon (once, to avoid runaway recursion)
 - Move ordering: TT move first, then captures (MVV-LVA), then killer moves (two slots per ply), then quiet moves seeded by a per-(color, from, to) history heuristic. History is bumped on quiet beta cutoffs by depth², capped to stay below capture scores.
 - Transposition table (~1M entries, ~24 MB), depth-preferred replacement, exact/lower/upper bound flags
-- Quiescence search with stand-pat + SEE pruning on captures
+- Quiescence search with stand-pat; searches captures (incl. en passant and capture-promotions)
 - Quiescence also considers non-capture *knight* checks at its first ply — catches the knight-fork class of horizon tactic
 - Mate detection with depth-adjusted scores (shorter mates score higher)
 
-**Evaluation** (`Evaluation.cs`)
+**Evaluation** (`BitboardEvalNative.cs`)
+
+Computed directly from the bitboard position. The positional terms below are a
+faithful reproduction of the reference evaluator in `Evaluation.cs`, validated to
+match it exactly across move walks (the reference is retained as the test oracle).
 
 - Material + piece-square tables (separate king PST for endgame)
 - Pawn structure: chains, doubled, isolated, passed (rank-weighted)
@@ -52,10 +56,14 @@ bitboard position. Move generation is validated against the standard perft suite
   promotions, castling, and pins
 - Validated by perft from the start position through depth 5 (4,865,609 nodes)
 
-**Position state** (`Board.cs`, `Zobrist.cs`)
+**Position state** (`Position.cs` for search, `Board.cs` / `Zobrist.cs` for I/O)
 
-- 64-square `Square[]` board with castling / en-passant / clock / king-position state
-- 64-bit Zobrist hash recomputed from scratch at the end of every `MovePiece` (cheaper than threading incremental updates through every special-case path)
+- Search and evaluation run on the bitboard `Position` — twelve piece bitboards +
+  occupancy, make/unmake, and a 64-bit Zobrist hash updated **incrementally** on the
+  search hot path
+- The mailbox `Board` (64-square `Square[]` with castling / en-passant / clock /
+  king-position state) remains the engine's game-state representation for I/O — FEN,
+  PGN, move history, UCI — off the search hot path
 - 50-move rule, 3-fold repetition
 
 **Time controls and opening book**
@@ -268,8 +276,7 @@ When you're done, type `quit`.
 ### Known limitations
 
 - Search runs synchronously on the main thread, so `stop` cannot interrupt a search in progress and `isready` is not answered mid-search. Most GUIs handle this gracefully.
-- Time controls are converted to a search ply depth up front rather than polled against a deadline mid-search; very short time controls may overshoot at higher depths.
-- The engine never underpromotes — `AiPonderMove` is hardcoded to promote to Queen.
+- Clock-based time controls are mapped to a wall-clock budget; the search polls a deadline (~every 2048 nodes) and abandons the in-progress iteration when it expires, returning the best move from the last completed depth.
 
 ## Testing
 
