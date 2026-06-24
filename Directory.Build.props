@@ -1,0 +1,13 @@
+<Project>
+
+  <!-- Single source of truth for the version across all projects: the ChessCore
+       UCI executable (read at runtime by the UCI `id name` and the `compiler`
+       command), the ChessCoreEngine library / MoonforgeChess.Engine NuGet package,
+       and MoonforgePlay. The Unity package manifest
+       (unity/com.adamberent.moonforge-chess/package.json) is JSON and is kept in
+       sync here manually; the release workflow stamps it from the git tag. -->
+  <PropertyGroup>
+    <Version>1.2.0</Version>
+  </PropertyGroup>
+
+</Project>

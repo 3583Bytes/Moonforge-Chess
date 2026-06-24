@@ -109,9 +109,68 @@ jobs:
           path: artifacts/*
           if-no-files-found: error
 
+  nuget:
+    name: Pack & publish library packages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Determine version from tag
+        id: ver
+        run: |
+          V="${{ github.event.inputs.tag || github.ref_name }}"
+          V="${V#v}"                                  # strip leading 'v' (v1.2.0 -> 1.2.0)
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "Package version: $V"
+
+      - name: Restore
+        run: dotnet restore ChessCore.sln
+
+      - name: Run fast tests
+        run: dotnet test ChessCore.sln -c Release --no-restore --filter "TestCategory!=Slow"
+
+      - name: Pack NuGet package (MoonforgeChess.Engine)
+        run: dotnet pack ChessCoreEngine -c Release -p:Version=${{ steps.ver.outputs.version }} -o nuget-out
+
+      - name: Assemble Unity UPM package zip
+        run: |
+          set -euxo pipefail
+          dotnet build ChessCoreEngine -c Release -f netstandard2.1
+          PKG=unity/com.adamberent.moonforge-chess
+          cp ChessCoreEngine/bin/Release/netstandard2.1/MoonforgeChess.Engine.dll "$PKG/Runtime/MoonforgeChess.Engine.dll"
+          # Stamp the tag version into the UPM manifest so the zipped package matches the release.
+          sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"${{ steps.ver.outputs.version }}\"/" "$PKG/package.json"
+          ( cd unity && zip -r -9 "../nuget-out/moonforge-chess-unity-${{ steps.ver.outputs.version }}.zip" com.adamberent.moonforge-chess )
+
+      - name: Push to NuGet.org
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          if [ -z "${NUGET_API_KEY:-}" ]; then
+            echo "NUGET_API_KEY secret not set — skipping push to nuget.org. The .nupkg is still attached to the GitHub Release."
+            exit 0
+          fi
+          dotnet nuget push nuget-out/*.nupkg \
+            --api-key "$NUGET_API_KEY" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: library-packages
+          path: nuget-out/*
+          if-no-files-found: error
+
   release:
     name: Create GitHub Release
-    needs: build
+    needs: [build, nuget]
     runs-on: ubuntu-latest
     steps:
       - name: Download all platform artifacts
@@ -136,4 +195,5 @@ jobs:
           files: |
             artifacts/*.zip
             artifacts/*.tar.gz
+            artifacts/*.nupkg
             artifacts/SHA256SUMS.txt

@@ -75,6 +75,30 @@ match it exactly across move walks (the reference is retained as the test oracle
 For reproducible search-performance numbers and a record of which changes
 moved them, see [`BASELINE.md`](BASELINE.md).
 
+## Use it as a library (NuGet & Unity)
+
+Besides the standalone UCI binary, the engine ships as embeddable packages, both exposing the same
+`ChessEngine.Engine.Engine` API.
+
+- **NuGet** — [`MoonforgeChess.Engine`](https://www.nuget.org/packages/MoonforgeChess.Engine) (targets `net10.0` and `netstandard2.1`):
+  ```bash
+  dotnet add package MoonforgeChess.Engine
+  ```
+- **Unity** — a UPM package under `unity/com.adamberent.moonforge-chess/` (Unity 2021.2+). In Package
+  Manager, choose *Add package from disk…* (select its `package.json`) or *Add package from git URL…*:
+  `https://github.com/3583Bytes/ChessCore.git?path=unity/com.adamberent.moonforge-chess`
+
+```csharp
+using ChessEngine.Engine;
+var engine = new Engine("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+engine.MovePieceAN("e2e4");   // human move (long algebraic)
+engine.AiPonderMove();        // engine searches and plays its reply
+Console.WriteLine(engine.FEN);
+```
+
+See [`ChessCoreEngine/PACKAGE.md`](ChessCoreEngine/PACKAGE.md) and the Unity package's README for the
+full API. `tools/pack.sh` builds both packages locally from a clean checkout.
+
 ## Download a prebuilt binary
 
 Each tagged release on the [Releases page](https://github.com/3583Bytes/ChessCore/releases) ships with prebuilt single-file executables for Windows, Linux, and macOS (both Intel and Apple Silicon). Two flavors per platform:
@@ -347,14 +371,16 @@ dotnet test ChessCore.sln -nologo
 
 The `.github/workflows/release.yml` workflow builds platform binaries automatically. To ship a new version:
 
-1. Bump `<Version>` in `ChessCore/ChessCore.csproj` (this is the **only** place the version lives — `id name` in UCI and the `compiler` command both read it from assembly metadata at runtime).
+1. Bump `<Version>` in `Directory.Build.props` (the single source of truth for all .NET projects — the UCI `id name`, the `compiler` command, and the `MoonforgeChess.Engine` NuGet package all derive from it). Also bump `"version"` in `unity/com.adamberent.moonforge-chess/package.json` (the release workflow stamps this from the tag, but keep it in sync for local installs). At release time the tag version overrides both via `-p:Version`.
 2. Commit and push to `master`.
 3. Tag the commit and push the tag:
     ```powershell
     git tag v1.2.0
     git push origin v1.2.0
     ```
-4. The workflow builds Windows / Linux / macOS-x64 / macOS-arm64 binaries (each in self-contained and framework-dependent flavors), generates `SHA256SUMS.txt`, and publishes a GitHub Release with auto-generated notes.
+4. The workflow builds Windows / Linux / macOS-x64 / macOS-arm64 binaries (each in self-contained and framework-dependent flavors), **packs the `MoonforgeChess.Engine` NuGet package and a Unity UPM zip** (both stamped with the tag version), generates `SHA256SUMS.txt`, and publishes a GitHub Release with auto-generated notes. The `.nupkg` and Unity zip are attached to the release.
+
+> **Publishing to nuget.org**: add a `NUGET_API_KEY` repository secret (Settings → Secrets and variables → Actions). When present, the workflow pushes the package to nuget.org with `--skip-duplicate`; when absent, it skips the push and still attaches the `.nupkg` to the GitHub Release.
 
 To rerun the workflow against an existing tag without pushing a new one, use the **Run workflow** button on the Actions tab and supply the tag name.
 

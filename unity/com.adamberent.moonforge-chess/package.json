@@ -1,0 +1,19 @@
+{
+  "name": "com.adamberent.moonforge-chess",
+  "version": "1.2.0",
+  "displayName": "Moonforge Chess Engine",
+  "description": "A bitboard chess engine library for Unity — alpha-beta search with transposition table, null-move/LMR pruning, quiescence, and positional evaluation, behind a simple Engine API. Self-contained, with a code-generated opening book and no external dependencies. Ships as a .NET Standard 2.1 managed plugin (Unity 2021.2+).",
+  "unity": "2021.2",
+  "author": {
+    "name": "Adam Berent",
+    "url": "https://github.com/3583Bytes/ChessCore"
+  },
+  "license": "MIT",
+  "keywords": [
+    "chess",
+    "engine",
+    "ai",
+    "bitboard",
+    "board-game"
+  ]
+}

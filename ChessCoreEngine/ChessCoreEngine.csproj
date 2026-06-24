@@ -1,11 +1,26 @@
-﻿<Project Sdk="Microsoft.NET.Sdk" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>net10.0;netstandard2.1</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <!-- Assembly name matches the package id; the public namespace stays ChessEngine.Engine. -->
+    <AssemblyName>MoonforgeChess.Engine</AssemblyName>
+
+    <!-- NuGet package metadata -->
+    <PackageId>MoonforgeChess.Engine</PackageId>
+    <Authors>Adam Berent</Authors>
+    <Product>Moonforge Chess</Product>
+    <Description>Moonforge Chess engine — a bitboard chess engine library (alpha-beta search with transposition table, null-move/LMR pruning, quiescence, and positional evaluation). Exposes a simple Engine API for move generation, FEN, and AI play. Self-contained: code-generated opening book, no external dependencies.</Description>
+    <PackageTags>chess;engine;uci;ai;bitboard;game;board-game</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/3583Bytes/ChessCore</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/3583Bytes/ChessCore</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>PACKAGE.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="NUnit" Version="3.11.0" />
+    <None Include="PACKAGE.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
 </Project>

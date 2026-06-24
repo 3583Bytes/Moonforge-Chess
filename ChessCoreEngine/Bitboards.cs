@@ -140,22 +140,52 @@ namespace ChessEngine.Engine
             }
         }
 
+        // BitOperations is .NET 5+ only; netstandard2.1 (Unity) needs portable
+        // fallbacks. The fallbacks are O(1) bit tricks, not loops, so the Unity
+        // build keeps the same throughput.
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static int PopCount(ulong b) => BitOperations.PopCount(b);
+        internal static int PopCount(ulong b)
+        {
+#if NETSTANDARD
+            b -= (b >> 1) & 0x5555555555555555UL;
+            b = (b & 0x3333333333333333UL) + ((b >> 2) & 0x3333333333333333UL);
+            b = (b + (b >> 4)) & 0x0f0f0f0f0f0f0f0fUL;
+            return (int)((b * 0x0101010101010101UL) >> 56);
+#else
+            return BitOperations.PopCount(b);
+#endif
+        }
 
         // Index of the least-significant set bit (lowest square index).
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static int Lsb(ulong b) => BitOperations.TrailingZeroCount(b);
+        internal static int Lsb(ulong b)
+        {
+#if NETSTANDARD
+            // trailing-zero count = popcount of the all-ones mask below the lowest set bit
+            return PopCount((b & (~b + 1UL)) - 1UL);
+#else
+            return BitOperations.TrailingZeroCount(b);
+#endif
+        }
 
         // Index of the most-significant set bit (highest square index).
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static int Msb(ulong b) => 63 - BitOperations.LeadingZeroCount(b);
+        internal static int Msb(ulong b)
+        {
+#if NETSTANDARD
+            // smear bits down so b = 2^(msb+1)-1, then msb = popcount-1
+            b |= b >> 1; b |= b >> 2; b |= b >> 4; b |= b >> 8; b |= b >> 16; b |= b >> 32;
+            return PopCount(b) - 1;
+#else
+            return 63 - BitOperations.LeadingZeroCount(b);
+#endif
+        }
 
         // Pop and return the least-significant set bit's index, clearing it in `b`.
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static int PopLsb(ref ulong b)
         {
-            int i = BitOperations.TrailingZeroCount(b);
+            int i = Lsb(b);
             b &= b - 1;
             return i;
         }
