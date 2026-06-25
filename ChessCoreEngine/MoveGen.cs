@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace ChessEngine.Engine
@@ -34,6 +35,75 @@ namespace ChessEngine.Engine
 
         internal static bool InCheck(Position p, int color)
             => IsSquareAttacked(p, p.KingSq[color], color ^ 1);
+
+        // --- Static Exchange Evaluation ---
+        // Material values by ChessPieceType (King=0..Pawn=5) for SEE only.
+        private static readonly int[] SeeVal = { 20000, 900, 500, 330, 320, 100 };
+
+        // All pieces of both colors attacking `sq` given occupancy `occ`.
+        private static ulong AttackersTo(Position p, int sq, ulong occ)
+        {
+            ulong att = (Bitboards.PawnAttacks[1][sq] & p.Pieces[(int)ChessPieceType.Pawn])          // white pawns
+                      | (Bitboards.PawnAttacks[0][sq] & p.Pieces[6 + (int)ChessPieceType.Pawn]);     // black pawns
+            att |= Bitboards.KnightAttacks[sq] & (p.Pieces[(int)ChessPieceType.Knight] | p.Pieces[6 + (int)ChessPieceType.Knight]);
+            att |= Bitboards.KingAttacks[sq] & (p.Pieces[(int)ChessPieceType.King] | p.Pieces[6 + (int)ChessPieceType.King]);
+            ulong bq = p.Pieces[(int)ChessPieceType.Bishop] | p.Pieces[(int)ChessPieceType.Queen]
+                     | p.Pieces[6 + (int)ChessPieceType.Bishop] | p.Pieces[6 + (int)ChessPieceType.Queen];
+            att |= Bitboards.BishopAttacks(sq, occ) & bq;
+            ulong rq = p.Pieces[(int)ChessPieceType.Rook] | p.Pieces[(int)ChessPieceType.Queen]
+                     | p.Pieces[6 + (int)ChessPieceType.Rook] | p.Pieces[6 + (int)ChessPieceType.Queen];
+            att |= Bitboards.RookAttacks(sq, occ) & rq;
+            return att & occ;
+        }
+
+        // Static exchange evaluation of capture `m`: net material (centipawns) for the
+        // side to move if the capture sequence on the target square is played out with
+        // least-valuable-attacker recaptures. Negative => the capture loses material.
+        internal static int See(Position p, Move m)
+        {
+            int to = m.To, from = m.From, us = p.SideToMove;
+            bool ep = m.Flag == MoveFlag.EnPassant;
+            int targetType = ep ? (int)ChessPieceType.Pawn : p.PieceOn[to] % 6;
+
+            Span<int> gain = stackalloc int[32];
+            int d = 0;
+            gain[0] = SeeVal[targetType];
+            int aType = p.PieceOn[from] % 6;
+
+            ulong occ = p.OccAll ^ Bitboards.Bit[from];
+            if (ep) occ ^= Bitboards.Bit[us == 0 ? to + 8 : to - 8];
+            ulong attackers = AttackersTo(p, to, occ);
+
+            ulong bq = p.Pieces[(int)ChessPieceType.Bishop] | p.Pieces[(int)ChessPieceType.Queen]
+                     | p.Pieces[6 + (int)ChessPieceType.Bishop] | p.Pieces[6 + (int)ChessPieceType.Queen];
+            ulong rq = p.Pieces[(int)ChessPieceType.Rook] | p.Pieces[(int)ChessPieceType.Queen]
+                     | p.Pieces[6 + (int)ChessPieceType.Rook] | p.Pieces[6 + (int)ChessPieceType.Queen];
+
+            int side = us ^ 1;
+            while (true)
+            {
+                d++;
+                gain[d] = SeeVal[aType] - gain[d - 1];
+
+                // Least-valuable attacker of `side` still on the board.
+                ulong sideAtt = attackers & p.OccByColor[side];
+                if (sideAtt == 0) break;
+                ulong lvaBit = 0;
+                for (int t = (int)ChessPieceType.Pawn; t >= (int)ChessPieceType.King; t--)
+                {
+                    ulong piecesT = sideAtt & p.Pieces[side * 6 + t];
+                    if (piecesT != 0) { aType = t; lvaBit = piecesT & (~piecesT + 1); break; }
+                }
+                occ ^= lvaBit; // remove the recapturing piece
+                // X-ray: removing it may reveal sliders behind it.
+                attackers |= (Bitboards.BishopAttacks(to, occ) & bq) | (Bitboards.RookAttacks(to, occ) & rq);
+                attackers &= occ;
+                side ^= 1;
+            }
+
+            while (--d > 0) gain[d - 1] = -Math.Max(-gain[d - 1], gain[d]);
+            return gain[0];
+        }
 
         internal static void GenerateLegal(Position p, List<Move> moves)
         {

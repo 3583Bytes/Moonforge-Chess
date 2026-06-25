@@ -176,6 +176,7 @@ namespace ChessEngine.Engine
             int us = p.SideToMove;
             byte bestSrc = 0, bestDst = 0;
             int legalCount = 0;
+            bool pvSearched = false; // PVS: first move full-window, rest scouted
 
             foreach (Move m in moves)
             {
@@ -203,11 +204,23 @@ namespace ChessEngine.Engine
                 }
 
                 legalCount++;
-                int value = -AlphaBeta(p, depth - 1 - reduction, -beta, -alpha, ply + 1, true, extended);
-
-                // Re-search at full depth if a reduced search beat alpha.
-                if (reduction > 0 && value > alpha)
-                    value = -AlphaBeta(p, depth - 1, -beta, -alpha, ply + 1, true, extended);
+                int value;
+                if (!pvSearched)
+                {
+                    // First move = the principal variation candidate: full window.
+                    value = -AlphaBeta(p, depth - 1 - reduction, -beta, -alpha, ply + 1, true, extended);
+                    if (reduction > 0 && value > alpha)
+                        value = -AlphaBeta(p, depth - 1, -beta, -alpha, ply + 1, true, extended);
+                }
+                else
+                {
+                    // Later moves: scout with a null window; only re-search if it beats alpha.
+                    value = -AlphaBeta(p, depth - 1 - reduction, -alpha - 1, -alpha, ply + 1, true, extended);
+                    if (reduction > 0 && value > alpha) // reduced scout surprised us → full depth, still null window
+                        value = -AlphaBeta(p, depth - 1, -alpha - 1, -alpha, ply + 1, true, extended);
+                    if (value > alpha && value < beta) // scout failed high inside the window → full re-search
+                        value = -AlphaBeta(p, depth - 1, -beta, -alpha, ply + 1, true, extended);
+                }
 
                 p.UnmakeMove(m);
 
@@ -230,6 +243,8 @@ namespace ChessEngine.Engine
                     bestSrc = m.From;
                     bestDst = m.To;
                 }
+
+                pvSearched = true; // subsequent moves are scouted against the current alpha
             }
 
             byte flag = alpha > origAlpha ? TranspositionTable.FlagExact : TranspositionTable.FlagUpper;
@@ -253,6 +268,14 @@ namespace ChessEngine.Engine
 
             foreach (Move m in moves)
             {
+                // SEE pruning: skip captures that lose material on the exchange. Keeps
+                // qsearch focused on real tactics and makes it cheaper, so the main
+                // search reaches greater depth in the same time. (Non-capture knight
+                // checks emitted at qsPly 0 are not captures and pass through.)
+                bool isCapture = m.Flag == MoveFlag.EnPassant || p.PieceOn[m.To] != Position.EMPTY;
+                if (isCapture && MoveGen.See(p, m) < 0)
+                    continue;
+
                 p.MakeMove(m);
                 int value = -Quiescence(p, -beta, -alpha, qsPly + 1);
                 p.UnmakeMove(m);
