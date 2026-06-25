@@ -7,7 +7,7 @@
        (unity/com.adamberent.moonforge-chess/package.json) is JSON and is kept in
        sync here manually; the release workflow stamps it from the git tag. -->
   <PropertyGroup>
-    <Version>1.2.0</Version>
+    <Version>1.2.1</Version>
   </PropertyGroup>
 
 </Project>

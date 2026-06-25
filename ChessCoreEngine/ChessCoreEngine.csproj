@@ -17,10 +17,13 @@
     <RepositoryUrl>https://github.com/3583Bytes/ChessCore</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>PACKAGE.md</PackageReadmeFile>
+    <!-- Package icon (conditional so packing still works if the file is absent). -->
+    <PackageIcon Condition="Exists('MoonforgeChess.png')">MoonforgeChess.png</PackageIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <None Include="PACKAGE.md" Pack="true" PackagePath="\" />
+    <None Include="MoonforgeChess.png" Pack="true" PackagePath="" Condition="Exists('MoonforgeChess.png')" />
   </ItemGroup>
 
 </Project>

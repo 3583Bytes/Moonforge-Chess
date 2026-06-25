@@ -2,6 +2,12 @@
 
 All notable changes to this package are documented here.
 
+## [1.2.1] - 2026-06-25
+
+### Changed
+- Version aligned with the NuGet release (added the package icon on NuGet). No
+  functional change to the Unity package.
+
 ## [1.2.0] - 2026-06-24
 
 ### Added
