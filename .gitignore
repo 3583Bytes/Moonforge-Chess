@@ -50,6 +50,8 @@ CLAUDE.md
 AGENT.md
 # Test Files
 *.py
+# except the SPRT match harness (a maintained dev tool, like tools/pack.sh)
+!tools/sprt.py
 *.ps1
 *.pgn
 BASELINE.md
