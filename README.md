@@ -12,14 +12,22 @@ traced end-to-end.
 
 The board uses a **bitboard** representation (`Position`, twelve piece bitboards +
 occupancy) with make/unmake and an incrementally-updated Zobrist hash. Move
-generation is bitboard-based (`MoveGen` / `Bitboards`, classical-ray sliding
+generation is bitboard-based (`MoveGen` / `Bitboards`, magic-bitboard sliding
 attacks). Evaluation reuses the original positional terms unchanged, fed from the
 bitboard position. Move generation is validated against the standard perft suite
 (initial position, Kiwipete, and positions 3–6) to community-verified node counts.
 
+**Strength.** In self-play calibration against Stockfish (capped via `UCI_Elo`), the engine plays at
+roughly **2200 Elo** at a 200 ms/move time control — an 80-game match scored 61% against a 2150-rated
+opponent (point estimate ≈2230, 95% CI ≈2150–2310). Caveats: Stockfish's `UCI_Elo` scale approximately
+tracks CCRL/FIDE but isn't identical, and engine strength is time-control dependent, so treat this as a
+ballpark rather than a published rating. Strength-affecting changes are gated with an SPRT match harness
+(`tools/sprt.py`).
+
 **Search** (`BitboardSearch.cs`)
 
 - Negamax alpha-beta, fail-hard, with iterative deepening at the root
+- Principal variation search (PVS): the first move at each node is searched with the full α–β window; later moves are scouted with a null window and re-searched at the full window only if they beat α
 - Time-bounded ID: when a wall-clock deadline is set, the search aborts the next iteration once the budget is spent and returns the best move from the last fully-completed depth
 - Null move pruning (R=2), skipped in check / at low depth / in low-piece endings (zugzwang) / when |β| is near mate
 - Reverse futility pruning (a.k.a. static null move pruning) at depth ≤ 6: if `staticEval − 100·depth ≥ β`, return immediately. Skipped in check and near mate scores.
@@ -27,7 +35,7 @@ bitboard position. Move generation is validated against the standard perft suite
 - Check extension at the search horizon (once, to avoid runaway recursion)
 - Move ordering: TT move first, then captures (MVV-LVA), then killer moves (two slots per ply), then quiet moves seeded by a per-(color, from, to) history heuristic. History is bumped on quiet beta cutoffs by depth², capped to stay below capture scores.
 - Transposition table (~1M entries, ~24 MB), depth-preferred replacement, exact/lower/upper bound flags
-- Quiescence search with stand-pat; searches captures (incl. en passant and capture-promotions)
+- Quiescence search with stand-pat and SEE pruning — captures with a negative static-exchange value are skipped (cheaper qsearch ⇒ more depth); searches captures (incl. en passant and capture-promotions)
 - Quiescence also considers non-capture *knight* checks at its first ply — catches the knight-fork class of horizon tactic
 - Mate detection with depth-adjusted scores (shorter mates score higher)
 
@@ -49,8 +57,8 @@ match it exactly across move walks (the reference is retained as the test oracle
 
 - Bitboard board state: twelve piece bitboards + per-color occupancy, with a
   maintained piece-on-square view for evaluation/FEN
-- Precomputed knight/king/pawn attack tables; classical-ray sliding-piece attacks
-  (portable — no BMI2/PEXT dependency)
+- Precomputed knight/king/pawn attack tables; **magic-bitboard** sliding-piece attacks
+  (magics generated once and baked in as constants — portable, no BMI2/PEXT dependency)
 - Make/unmake with incremental Zobrist hashing; legality by king-safety filter
 - Pseudo-legal generation + `IsSquareAttacked`; perft-verified incl. en passant,
   promotions, castling, and pins
