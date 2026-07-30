@@ -516,12 +516,6 @@ namespace ChessEngine.Engine
             WhiteAttackBoard = new bool[64];
             BlackAttackBoard = new bool[64];
 
-            for (byte x = 0; x < 64; x++)
-            {
-                WhiteAttackBoard[x] = board.WhiteAttackBoard[x];
-                BlackAttackBoard[x] = board.BlackAttackBoard[x];
-            }
-
             EndGamePhase = board.EndGamePhase;
 
             HalfMoveClock = board.HalfMoveClock;

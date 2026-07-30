@@ -61,6 +61,60 @@ public class EvalEquivalenceTests
         return board.Score;
     }
 
+    [TestCase("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")]
+    [TestCase("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1")]
+    public void GenerateValidMoves_IsIdempotent(string fen)
+    {
+        var board = new Board(fen);
+        PieceValidMoves.GenerateValidMoves(board);
+        Evaluation.EvaluateBoardScore(board);
+
+        int firstScore = board.Score;
+        bool[] firstWhiteAttacks = (bool[])board.WhiteAttackBoard.Clone();
+        bool[] firstBlackAttacks = (bool[])board.BlackAttackBoard.Clone();
+        var firstAttackedValues = new short[64];
+        var firstDefendedValues = new short[64];
+        var firstValidMoves = new byte[64][];
+        for (int square = 0; square < board.Squares.Length; square++)
+        {
+            var piece = board.Squares[square].Piece;
+            if (piece == null)
+                continue;
+
+            firstAttackedValues[square] = piece.AttackedValue;
+            firstDefendedValues[square] = piece.DefendedValue;
+            firstValidMoves[square] = piece.ValidMoves.ToArray();
+        }
+
+        PieceValidMoves.GenerateValidMoves(board);
+        Evaluation.EvaluateBoardScore(board);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(board.Score, Is.EqualTo(firstScore));
+            Assert.That(board.WhiteAttackBoard, Is.EqualTo(firstWhiteAttacks));
+            Assert.That(board.BlackAttackBoard, Is.EqualTo(firstBlackAttacks));
+
+            for (int square = 0; square < board.Squares.Length; square++)
+            {
+                var piece = board.Squares[square].Piece;
+                if (firstValidMoves[square] == null)
+                {
+                    Assert.That(piece, Is.Null, $"piece appeared on square {square}");
+                    continue;
+                }
+
+                Assert.That(piece, Is.Not.Null, $"piece disappeared from square {square}");
+                Assert.That(piece!.AttackedValue, Is.EqualTo(firstAttackedValues[square]),
+                    $"attacked value changed on square {square}");
+                Assert.That(piece.DefendedValue, Is.EqualTo(firstDefendedValues[square]),
+                    $"defended value changed on square {square}");
+                Assert.That(piece.ValidMoves, Is.EqualTo(firstValidMoves[square]),
+                    $"valid moves changed on square {square}");
+            }
+        });
+    }
+
     // Stronger gate: drive the bitboard Position and a legacy Board in lockstep
     // through the same moves and assert scores stay identical at every node. This
     // exercises path-dependent state (notably the Castled flag, which the
@@ -69,10 +123,6 @@ public class EvalEquivalenceTests
     [TestCase("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", 3)]
     [TestCase("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1", 2)] // Kiwipete: castling lines
     [TestCase("r3k2r/pppq1ppp/2n1bn2/3pp3/3PP3/2N1BN2/PPPQ1PPP/R3K2R w KQkq - 0 1", 2)]   // both sides can castle
-    [Ignore("Asserts against the legacy SEARCH's path-dependent eval, which depends on latent bugs " +
-            "(uncleared attack boards via the copy ctor, dropped en passant via FastCopy). The bitboard " +
-            "eval matches the self-consistent fresh-load score instead — see BitboardScorer battery test. " +
-            "Pending decision on the exact semantics to target.")]
     public void Scores_MatchInLockstep_ThroughMoves(string fen, int depth)
     {
         var pos = Position.FromFen(fen);

@@ -332,9 +332,27 @@ namespace ChessEngine.Engine
 
         internal static void GenerateValidMoves(Board board)
         {
-            // Reset Board
+            // Attack maps, per-piece attack/defence values, and move lists are
+            // derived from the current position. Rebuild them from scratch so
+            // repeated generation and generation on a copied Board cannot retain
+            // attacks from a parent/previous position.
+            System.Array.Clear(board.WhiteAttackBoard, 0, board.WhiteAttackBoard.Length);
+            System.Array.Clear(board.BlackAttackBoard, 0, board.BlackAttackBoard.Length);
+
             board.BlackCheck = false;
             board.WhiteCheck = false;
+            board.EndGamePhase = false;
+
+            for (byte x = 0; x < 64; x++)
+            {
+                Piece piece = board.Squares[x].Piece;
+                if (piece == null)
+                    continue;
+
+                piece.AttackedValue = 0;
+                piece.DefendedValue = 0;
+                piece.ValidMoves = new Stack<byte>(piece.LastValidMoveCount);
+            }
 
             byte blackRooksMoved = 0;
             byte whiteRooksMoved = 0;
@@ -349,8 +367,6 @@ namespace ChessEngine.Engine
 
                 if (sqr.Piece == null)
                     continue;
-
-                sqr.Piece.ValidMoves = new Stack<byte>(sqr.Piece.LastValidMoveCount);
 
                 remainingPieces++;
 
