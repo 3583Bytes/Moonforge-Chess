@@ -455,6 +455,16 @@ namespace ChessEngine.Engine // Reverted to original namespace
             return ChessBoard.Score;
         }
 
+        public EvaluationBreakdown GetEvaluationBreakdown()
+        {
+            Position position = Position.FromFen(Board.Fen(false, ChessBoard));
+            // FEN records castling rights, not whether the king actually castled.
+            // Preserve the path-dependent flags used by the public Board evaluator.
+            position.Castled[0] = ChessBoard.WhiteCastled;
+            position.Castled[1] = ChessBoard.BlackCastled;
+            return BitboardEvalNative.DetailedScore(position);
+        }
+
         public byte[][] GetValidMoves(byte boardColumn, byte boardRow)
         {
             byte index = GetBoardIndex(boardColumn, boardRow);

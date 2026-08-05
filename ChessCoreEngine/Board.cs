@@ -162,35 +162,35 @@ namespace ChessEngine.Engine
  
                 if (index < 64 && spc == 0)
                 {
-                    if (c == '1' && index < 63)
+                    if (c == '1' && index <= 63)
                     {
                         index++;
                     }
-                    else if (c == '2' && index < 62)
+                    else if (c == '2' && index <= 62)
                     {
                         index += 2;
                     }
-                    else if (c == '3' && index < 61)
+                    else if (c == '3' && index <= 61)
                     {
                         index += 3;
                     }
-                    else if (c == '4' && index < 60)
+                    else if (c == '4' && index <= 60)
                     {
                         index += 4;
                     }
-                    else if (c == '5' && index < 59)
+                    else if (c == '5' && index <= 59)
                     {
                         index += 5;
                     }
-                    else if (c == '6' && index < 58)
+                    else if (c == '6' && index <= 58)
                     {
                         index += 6;
                     }
-                    else if (c == '7' && index < 57)
+                    else if (c == '7' && index <= 57)
                     {
                         index += 7;
                     }
-                    else if (c == '8' && index < 56)
+                    else if (c == '8' && index <= 56)
                     {
                         index += 8;
                     }
@@ -401,7 +401,7 @@ namespace ChessEngine.Engine
                     }
                     else if (c == '0' && spacers == 4)
                     {
-                        MoveCount = (byte)((MoveCount * 10) + 0);
+                        HalfMoveClock = (byte)(HalfMoveClock * 10);
                     }
                     else if (c == '1' && spacers == 5)
                     {

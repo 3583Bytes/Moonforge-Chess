@@ -211,19 +211,27 @@ namespace ChessEngine.Engine
         // Native evaluation: reproduces Evaluation.EvaluateBoardScore exactly from the
         // Position + computed signals, with no Board projection and no
         // GenerateValidMoves. Validated against BitboardEval.ScoreViaLegacyGen.
-        internal static int Score(Position p)
+        internal static int Score(Position p) => Evaluate(p).Total;
+
+        internal static EvaluationBreakdown DetailedScore(Position p) => Evaluate(p);
+
+        private static EvaluationBreakdown Evaluate(Position p)
         {
-            if (p.HalfmoveClock >= 100) return 0; // 50-move rule (legacy returns 0)
+            var result = new EvaluationBreakdown();
+            if (p.HalfmoveClock >= 100)
+            {
+                result.DrawReason = "50-move rule";
+                return result;
+            }
 
             Signals sig = ComputeSignals(p);
             bool endGame = sig.EndGame;
-            int score = 0;
 
-            if (sig.BlackCheck) { score += 70; if (endGame) score += 10; }
-            else if (sig.WhiteCheck) { score -= 70; if (endGame) score -= 10; }
-            if (p.Castled[1]) score -= 50;
-            if (p.Castled[0]) score += 50;
-            score += p.SideToMove == 0 ? 10 : -10; // tempo
+            if (sig.BlackCheck) { result.Check += 70; if (endGame) result.Check += 10; }
+            else if (sig.WhiteCheck) { result.Check -= 70; if (endGame) result.Check -= 10; }
+            if (p.Castled[1]) result.Castling -= 50;
+            if (p.Castled[0]) result.Castling += 50;
+            result.Tempo = p.SideToMove == 0 ? 10 : -10;
 
             var whitePawnCount = new short[8];
             var blackPawnCount = new short[8];
@@ -237,30 +245,34 @@ namespace ChessEngine.Engine
                 int color = code / 6;
                 int type = code % 6;
                 int index = color == 0 ? sq : sq ^ 56; // rank mirror for Black
+                int sign = color == 0 ? 1 : -1;
 
-                int ps = Material[type] + sig.Defended[sq] - sig.Attacked[sq];
+                result.Material += sign * Material[type];
+
+                int attackDefense = sig.Defended[sq] - sig.Attacked[sq];
                 if (sig.Defended[sq] < sig.Attacked[sq])
-                    ps -= (sig.Attacked[sq] - sig.Defended[sq]) * 10;
-                ps += sig.Mobility[sq];
+                    attackDefense -= (sig.Attacked[sq] - sig.Defended[sq]) * 10;
+                result.AttackDefense += sign * attackDefense;
+                result.Mobility += sign * sig.Mobility[sq];
 
                 switch ((ChessPieceType)type)
                 {
                     case ChessPieceType.Pawn:
                         insufficient = false;
                         int file = sq % 8;
-                        if (file == 0 || file == 7) ps -= 15;
-                        ps += Evaluation.PawnTable[index];
-                        ps += PawnChainBonus(p, sq, color);
+                        if (file == 0 || file == 7) result.PawnStructure -= sign * 15;
+                        result.PieceSquareTables += sign * Evaluation.PawnTable[index];
+                        result.PawnStructure += sign * PawnChainBonus(p, sq, color);
                         if (color == 0)
                         {
-                            if (whitePawnCount[file] > 0) ps -= 15;
+                            if (whitePawnCount[file] > 0) result.PawnStructure -= 15;
                             if (sq >= 8 && sq <= 15) { if (sig.Attacked[sq] == 0) { whitePawnCount[file] += 100; if (sig.Defended[sq] != 0) whitePawnCount[file] += 50; } }
                             else if (sq >= 16 && sq <= 23) { if (sig.Attacked[sq] == 0) { whitePawnCount[file] += 50; if (sig.Defended[sq] != 0) whitePawnCount[file] += 25; } }
                             whitePawnCount[file] += 10;
                         }
                         else
                         {
-                            if (blackPawnCount[file] > 0) ps -= 15;
+                            if (blackPawnCount[file] > 0) result.PawnStructure += 15;
                             if (sq >= 48 && sq <= 55) { if (sig.Attacked[sq] == 0) { blackPawnCount[file] += 100; if (sig.Defended[sq] != 0) blackPawnCount[file] += 50; } }
                             else if (sq >= 40 && sq <= 47) { if (sig.Attacked[sq] == 0) { blackPawnCount[file] += 50; if (sig.Defended[sq] != 0) blackPawnCount[file] += 25; } }
                             blackPawnCount[file] += 10;
@@ -268,58 +280,62 @@ namespace ChessEngine.Engine
                         break;
                     case ChessPieceType.Knight:
                         if (color == 0) whiteKnight++; else blackKnight++;
-                        ps += Evaluation.KnightTable[index];
-                        if (endGame) ps -= 10;
+                        result.PieceSquareTables += sign * Evaluation.KnightTable[index];
+                        if (endGame) result.MinorPieceAdjustments -= sign * 10;
                         break;
                     case ChessPieceType.Bishop:
                         int bc = color == 0 ? ++whiteBishop : ++blackBishop;
-                        if (bc == 2) ps += 10;
-                        if (endGame) ps += 10;
-                        ps += Evaluation.BishopTable[index];
+                        if (bc == 2) result.MinorPieceAdjustments += sign * 10;
+                        if (endGame) result.MinorPieceAdjustments += sign * 10;
+                        result.PieceSquareTables += sign * Evaluation.BishopTable[index];
                         break;
                     case ChessPieceType.Rook:
                         insufficient = false;
                         break;
                     case ChessPieceType.Queen:
                         insufficient = false;
-                        if (!endGame) ps -= 10; // queen.Moved is always true in this engine
+                        if (!endGame) result.QueenDevelopment -= sign * 10; // queen.Moved is always true in this engine
                         break;
                     case ChessPieceType.King:
-                        if (sig.Mobility[sq] < 2) ps -= 5;
-                        ps += endGame ? Evaluation.KingTableEndGame[index] : Evaluation.KingTable[index];
+                        if (sig.Mobility[sq] < 2) result.KingSafety -= sign * 5;
+                        result.PieceSquareTables += sign *
+                            (endGame ? Evaluation.KingTableEndGame[index] : Evaluation.KingTable[index]);
                         break;
                 }
-
-                if (color == 0) score += ps; else score -= ps;
 
                 if (type == (int)ChessPieceType.King)
                 {
                     if (color == 0 && sq != 60)
-                        score += CheckPawnWall(p, sq - 8, sq) + CheckPawnWall(p, sq - 7, sq) + CheckPawnWall(p, sq - 9, sq);
+                        result.KingSafety += CheckPawnWall(p, sq - 8, sq) + CheckPawnWall(p, sq - 7, sq) + CheckPawnWall(p, sq - 9, sq);
                     else if (color == 1 && sq != 4)
-                        score -= CheckPawnWall(p, sq + 8, sq) + CheckPawnWall(p, sq + 7, sq) + CheckPawnWall(p, sq + 9, sq);
+                        result.KingSafety -= CheckPawnWall(p, sq + 8, sq) + CheckPawnWall(p, sq + 7, sq) + CheckPawnWall(p, sq + 9, sq);
                 }
             }
 
             if (insufficient && (whiteBishop + whiteKnight > 1 || blackBishop + blackKnight > 1))
                 insufficient = false;
-            if (insufficient) return 0;
+            if (insufficient)
+            {
+                result.DrawReason = "insufficient material";
+                result.DrawAdjustment = -result.Total;
+                return result;
+            }
 
             if (!endGame)
             {
                 bool whiteCanCastle = (p.CastleRights & (Position.WK | Position.WQ)) != 0;
                 bool blackCanCastle = (p.CastleRights & (Position.BK | Position.BQ)) != 0;
-                if (!whiteCanCastle && !p.Castled[0]) score -= 50;
-                if (!blackCanCastle && !p.Castled[1]) score += 50;
+                if (!whiteCanCastle && !p.Castled[0]) result.Castling -= 50;
+                if (!blackCanCastle && !p.Castled[1]) result.Castling += 50;
 
-                score += KingFileOpenness(p.KingSq[0], 0, whitePawnCount, blackPawnCount)
-                       + KingZoneAttacks(sig.BlackAtt, p.KingSq[0]);
-                score -= KingFileOpenness(p.KingSq[1], 1, whitePawnCount, blackPawnCount)
-                       + KingZoneAttacks(sig.WhiteAtt, p.KingSq[1]);
+                result.KingSafety += KingFileOpenness(p.KingSq[0], 0, whitePawnCount, blackPawnCount)
+                                   + KingZoneAttacks(sig.BlackAtt, p.KingSq[0]);
+                result.KingSafety -= KingFileOpenness(p.KingSq[1], 1, whitePawnCount, blackPawnCount)
+                                   + KingZoneAttacks(sig.WhiteAtt, p.KingSq[1]);
             }
 
-            score += PawnStructure(whitePawnCount, blackPawnCount);
-            return score;
+            result.PawnStructure += PawnStructure(whitePawnCount, blackPawnCount);
+            return result;
         }
 
         private static int PawnChainBonus(Position p, int sq, int color)

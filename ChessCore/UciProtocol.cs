@@ -59,7 +59,7 @@ namespace ChessCore
                     case "d":
                     case "show":         DrawBoard();              break;
                     case "fen":          Send("info string " + _engine.FEN); break;
-                    case "eval":         HandleEval();             break;
+                    case "eval":         HandleEval(rest);         break;
                     case "bench":        HandleBench();            break;
                     case "flip":         HandleFlip();             break;
                     case "compiler":     HandleCompiler();         break;
@@ -316,8 +316,14 @@ namespace ChessCore
             return true;
         }
 
-        private void HandleEval()
+        private void HandleEval(string args)
         {
+            if (args.Equals("detail", StringComparison.OrdinalIgnoreCase))
+            {
+                HandleEvalDetail();
+                return;
+            }
+
             int whitePov = _engine.EvaluateBoardScore();
             int stmPov = _engine.WhoseMove == ChessPieceColor.White ? whitePov : -whitePov;
 
@@ -329,6 +335,46 @@ namespace ChessCore
                 _engine.WhoseMove, stmPov));
             Send("info string Note: includes material + piece-square tables (see Evaluation.cs).");
         }
+
+        private void HandleEvalDetail()
+        {
+            EvaluationBreakdown detail = _engine.GetEvaluationBreakdown();
+            int stmPov = _engine.WhoseMove == ChessPieceColor.White ? detail.Total : -detail.Total;
+
+            Send("info string FEN: " + _engine.FEN);
+            Send("info string Evaluation detail (White POV; positive favors White)");
+            SendEvalTerm("Material", detail.Material);
+            SendEvalTerm("Piece-square tables", detail.PieceSquareTables);
+            SendEvalTerm("Mobility", detail.Mobility);
+            SendEvalTerm("Attack / defence", detail.AttackDefense);
+            SendEvalTerm("Pawn structure", detail.PawnStructure);
+            SendEvalTerm("King safety", detail.KingSafety);
+            SendEvalTerm("Minor-piece adjustments", detail.MinorPieceAdjustments);
+            SendEvalTerm("Queen development", detail.QueenDevelopment);
+            SendEvalTerm("Check", detail.Check);
+            SendEvalTerm("Castling / rights", detail.Castling);
+            SendEvalTerm("Tempo", detail.Tempo);
+            if (detail.DrawAdjustment != 0)
+                SendEvalTerm("Draw adjustment", detail.DrawAdjustment);
+            if (!string.IsNullOrEmpty(detail.DrawReason))
+                Send("info string Draw: " + detail.DrawReason);
+            Send("info string ----------------------------------------");
+            SendEvalTerm("Total", detail.Total);
+            Send(string.Format(CultureInfo.InvariantCulture,
+                "info string Side to move ({0}): {1} cp",
+                _engine.WhoseMove, FormatSigned(stmPov)));
+        }
+
+        private static void SendEvalTerm(string label, int value)
+        {
+            Send(string.Format(CultureInfo.InvariantCulture,
+                "info string {0,-26} {1} cp", label, FormatSigned(value)));
+        }
+
+        private static string FormatSigned(int value)
+            => value >= 0
+                ? "+" + value.ToString(CultureInfo.InvariantCulture)
+                : value.ToString(CultureInfo.InvariantCulture);
 
         // Compact set of well-known test positions. Search runs synchronously; depth 5 keeps
         // total bench time under ~10s on a modern dev box while still exercising the search.

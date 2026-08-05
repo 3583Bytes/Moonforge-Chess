@@ -222,7 +222,8 @@ When running the engine by hand (no GUI attached), a few non-standard commands a
 |---|---|
 | `show`, `d` | Render the current position as an ASCII board, plus FEN and side-to-move. |
 | `fen` | Print just the FEN. |
-| `eval` | Print the static evaluation (material + piece-square tables) from both White's and side-to-move's perspectives. |
+| `eval` | Print the static evaluation from both White's and side-to-move's perspectives. |
+| `eval detail` | Break the static evaluation into material, piece-square tables, mobility, king safety, pawn structure, and the other scoring terms. Values are centipawns from White's perspective and add up to the reported total. |
 | `bench` | Run a fixed search benchmark over six well-known test positions at depth 5 and report total nodes / NPS / time. Use this to spot performance regressions. |
 | `flip` | Mirror the board top-to-bottom and swap every piece's color. Mostly useful for verifying evaluation symmetry. |
 | `compiler` | Print the .NET runtime version, framework, OS, and process architecture. |
@@ -405,7 +406,6 @@ http://www.adamberent.com/wp-content/uploads/2019/02/GuideToProgrammingChessEngi
 Website
 
 http://adamberent.com/home/chess/computer-chess/
-
 
 
 
