@@ -121,7 +121,15 @@ namespace ChessCore
                 return;
             }
 
-            _engine.InitiateBoard(fen);
+            try
+            {
+                _engine.InitiateBoard(fen);
+            }
+            catch (FormatException ex)
+            {
+                Send("info string " + ex.Message);
+                return;
+            }
 
             if (movesIdx < 0) return;
             var movesPart = args.Substring(movesIdx + "moves".Length).Trim();

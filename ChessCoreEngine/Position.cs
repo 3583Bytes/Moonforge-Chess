@@ -337,56 +337,25 @@ namespace ChessEngine.Engine
 
         internal static Position FromFen(string fen)
         {
+            FenParser.ParsedFen parsed = FenParser.Parse(fen);
             var p = new Position();
-            string[] parts = fen.Trim().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-
-            int sq = 0;
-            foreach (char c in parts[0])
+            for (int square = 0; square < parsed.PieceOn.Length; square++)
             {
-                if (c == '/') continue;
-                if (char.IsDigit(c)) { sq += c - '0'; continue; }
-
-                ChessPieceColor color = char.IsUpper(c) ? ChessPieceColor.White : ChessPieceColor.Black;
-                ChessPieceType type = char.ToLower(c) switch
-                {
-                    'k' => ChessPieceType.King,
-                    'q' => ChessPieceType.Queen,
-                    'r' => ChessPieceType.Rook,
-                    'b' => ChessPieceType.Bishop,
-                    'n' => ChessPieceType.Knight,
-                    'p' => ChessPieceType.Pawn,
-                    _ => ChessPieceType.None
-                };
-                p.RawAdd(PieceIndex(color, type), sq);
-                sq++;
+                byte code = parsed.PieceOn[square];
+                if (code != FenParser.Empty) p.RawAdd(code, square);
             }
 
-            p.SideToMove = parts.Length > 1 && parts[1] == "b" ? 1 : 0;
-
-            p.CastleRights = 0;
-            if (parts.Length > 2 && parts[2] != "-")
-            {
-                if (parts[2].Contains('K')) p.CastleRights |= WK;
-                if (parts[2].Contains('Q')) p.CastleRights |= WQ;
-                if (parts[2].Contains('k')) p.CastleRights |= BK;
-                if (parts[2].Contains('q')) p.CastleRights |= BQ;
-            }
+            p.SideToMove = parsed.SideToMove == ChessPieceColor.White ? 0 : 1;
+            p.CastleRights = parsed.CastleRights;
 
             // Matches Board(fen): {White,Black}Castled start true and are cleared
             // only when that side still has a castling right in the FEN.
             p.Castled[0] = (p.CastleRights & (WK | WQ)) == 0;
             p.Castled[1] = (p.CastleRights & (BK | BQ)) == 0;
 
-            p.EpSquare = -1;
-            if (parts.Length > 3 && parts[3] != "-" && parts[3].Length >= 2)
-            {
-                int file = parts[3][0] - 'a';
-                int rank = parts[3][1] - '0';
-                p.EpSquare = (8 - rank) * 8 + file;
-            }
-
-            if (parts.Length > 4 && int.TryParse(parts[4], out int hm)) p.HalfmoveClock = hm;
-            if (parts.Length > 5 && int.TryParse(parts[5], out int fm)) p.FullMove = fm;
+            p.EpSquare = parsed.EnPassantSquare;
+            p.HalfmoveClock = parsed.HalfmoveClock;
+            p.FullMove = parsed.HasMoveCounters ? parsed.FullmoveNumber : 1;
 
             p.Hash = p.ComputeHash();
             return p;
