@@ -40,9 +40,27 @@ foreach (var m in engine.GetMoveHistory())
 - `bool MovePieceAN(string move)` — apply a move like `"e2e4"`, `"e1g1"` (castling), `"e7e8q"` (promotion).
 - `bool IsValidMoveAN(string move)` — legality check without playing.
 - `void AiPonderMove()` — search and play the engine's move.
+- `EngineSearchResult SearchBestMove(...)` — search without changing the board; accepts a cancellation token and an optional callback for each completed iterative-deepening result.
 - `Engine.Difficulty GameDifficulty` — `Easy` … `VeryHard` (maps to search depth).
 - `string FEN` — current position as FEN.
 - `GetMoveHistory()` — move list (`MoveContent`, with notation helpers).
+
+For analysis or GUI integration, use the non-mutating search API:
+
+```csharp
+using System.Threading;
+
+engine.PlyDepthSearched = 8;
+EngineSearchResult result = engine.SearchBestMove(
+    CancellationToken.None,
+    info => Console.WriteLine($"depth {info.Depth}: {info.Score} cp"));
+
+Console.WriteLine(result.HasMove ? result.BestMove : "(no legal move)");
+```
+
+`EngineSearchInfo.IsMate` and `MateInMoves` distinguish mate scores from ordinary
+centipawn evaluations. `AiPonderMove()` remains available when search-and-play is
+the desired operation.
 
 ## License
 

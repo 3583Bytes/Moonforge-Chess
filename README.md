@@ -28,7 +28,7 @@ ballpark rather than a published rating. Strength-affecting changes are gated wi
 
 - Negamax alpha-beta, fail-hard, with iterative deepening at the root
 - Principal variation search (PVS): the first move at each node is searched with the full α–β window; later moves are scouted with a null window and re-searched at the full window only if they beat α
-- Time-bounded ID: when a wall-clock deadline is set, the search aborts the next iteration once the budget is spent and returns the best move from the last fully-completed depth
+- Time-bounded and externally cancellable ID: the search reports every completed depth, aborts the in-progress iteration when its deadline expires or the GUI sends `stop`, and returns the best move from the last fully-completed depth
 - Null move pruning (R=2), skipped in check / at low depth / in low-piece endings (zugzwang) / when |β| is near mate
 - Reverse futility pruning (a.k.a. static null move pruning) at depth ≤ 6: if `staticEval − 100·depth ≥ β`, return immediately. Skipped in check and near mate scores.
 - Late move reductions: at depth ≥ 3, quiet non-check moves past the third ordered move are searched at reduced depth (1 ply, or 2 plies past the sixth move). Reduced searches that beat α are re-searched at full depth.
@@ -78,6 +78,7 @@ match it exactly across move walks (the reference is retained as the test oracle
 
 - `go wtime/btime/winc/binc/movestogo` is mapped to a wall-clock budget at the start of the search; the search polls a deadline every ~2048 nodes and aborts the next iteration cleanly when the budget is spent (the best move from the last completed depth is returned)
 - `go depth N` and `go movetime ms` bypass the deadline mapping — the former runs to a fixed ply, the latter sets the deadline directly
+- Search runs on a worker task so the protocol remains responsive to `isready`, `stop`, `quit`, and new-position commands. Each completed depth is streamed as a UCI `info` line.
 - Bundled opening book (~thousands of positions) consulted before search; book hits return in microseconds
 
 For reproducible search-performance numbers and a record of which changes
@@ -210,7 +211,6 @@ Pick a time control in the GUI's "New Game" dialog rather than configuring depth
 
 ### Known interaction quirks
 
-- **"Stop" isn't honored mid-search.** Moonforge Chess runs search synchronously, so if you hit "Force Move" or "Move Now" in the GUI, the engine will finish its current iteration before returning. For short time controls this is usually invisible.
 - **No `Hash` or `Threads` options.** Moonforge Chess advertises no UCI options at startup, so the engine-options pane in the GUI will be empty. There's nothing to tune.
 - **No pondering.** The engine ignores `ponderhit` and `go ponder`. If your GUI has "Engine Pondering" enabled, leave it off — it won't hurt but it won't help either.
 
@@ -303,13 +303,13 @@ When you're done, type `quit`.
 | `go depth N` | Search to a fixed ply. |
 | `go movetime ms` | Search for roughly that long (mapped to a ply depth). |
 | `go wtime … btime … [winc …] [binc …] [movestogo …]` | Standard clock-based time control; budget mapped to a ply depth. |
-| `go infinite` | Searches at the engine's deepest configured ply. |
-| `stop`, `setoption`, `ponderhit`, `debug`, `register` | Accepted but currently no-ops. |
+| `go infinite` | Iteratively searches until `stop` (with a high safety depth ceiling). |
+| `stop` | Cancels the active search and returns the best move from its last completed iteration. |
+| `setoption`, `ponderhit`, `debug`, `register` | Accepted but currently no-ops. |
 
 ### Known limitations
 
-- Search runs synchronously on the main thread, so `stop` cannot interrupt a search in progress and `isready` is not answered mid-search. Most GUIs handle this gracefully.
-- Clock-based time controls are mapped to a wall-clock budget; the search polls a deadline (~every 2048 nodes) and abandons the in-progress iteration when it expires, returning the best move from the last completed depth.
+- Clock-based time controls are mapped to a wall-clock budget; the search polls cancellation/deadline state about every 2048 nodes and abandons the in-progress iteration when it expires, returning the best move from the last completed depth.
 
 ## Testing
 
@@ -406,6 +406,5 @@ http://www.adamberent.com/wp-content/uploads/2019/02/GuideToProgrammingChessEngi
 Website
 
 http://adamberent.com/home/chess/computer-chess/
-
 
 

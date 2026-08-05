@@ -2,7 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
+using System.IO;
 using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 using ChessEngine.Engine;
 
 namespace ChessCore
@@ -16,6 +19,7 @@ namespace ChessCore
         private static readonly string EngineName = "Moonforge Chess " + Version;
         private const string EngineAuthor = "Adam Berent";
         private const string StartFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+        private static readonly object OutputSync = new object();
 
         private static string ReadAssemblyVersion()
         {
@@ -28,60 +32,87 @@ namespace ChessCore
         }
 
         private readonly Engine _engine = new Engine();
+        private readonly TextReader _input;
+        private readonly TextWriter _output;
+        private readonly object _searchSync = new object();
+        private CancellationTokenSource _searchCancellation;
+        private Task _searchTask;
+
+        internal UciProtocol()
+            : this(Console.In, Console.Out)
+        {
+        }
+
+        internal UciProtocol(TextReader input, TextWriter output)
+        {
+            _input = input ?? throw new ArgumentNullException(nameof(input));
+            _output = output ?? throw new ArgumentNullException(nameof(output));
+        }
 
         public void Run()
         {
-            string line;
-            while ((line = Console.In.ReadLine()) != null)
+            try
             {
-                line = line.Trim();
-                if (line.Length == 0) continue;
-
-                var space = line.IndexOf(' ');
-                var cmd = space < 0 ? line : line.Substring(0, space);
-                var rest = space < 0 ? string.Empty : line.Substring(space + 1).Trim();
-
-                switch (cmd)
+                string line;
+                while ((line = _input.ReadLine()) != null)
                 {
-                    case "uci":          HandleUci();              break;
-                    case "isready":      Send("readyok");          break;
-                    case "ucinewgame":   _engine.NewGame();        break;
-                    case "position":     HandlePosition(rest);     break;
-                    case "go":           HandleGo(rest);           break;
-                    case "stop":         /* search is synchronous; nothing to stop */ break;
-                    case "setoption":    /* no options advertised */ break;
-                    case "ponderhit":    /* pondering not supported */ break;
-                    case "debug":        /* ignored */             break;
-                    case "register":     /* ignored */             break;
-                    case "quit":         return;
-                    // Non-standard extensions, emitted as `info string` so GUIs ignore them and
-                    // a human running the engine at a terminal can still use them.
-                    case "d":
-                    case "show":         DrawBoard();              break;
-                    case "fen":          Send("info string " + _engine.FEN); break;
-                    case "eval":         HandleEval(rest);         break;
-                    case "bench":        HandleBench();            break;
-                    case "flip":         HandleFlip();             break;
-                    case "compiler":     HandleCompiler();         break;
-                    default:
-                        if (LooksLikeMove(cmd))
-                        {
-                            if (!ApplyUciMove(cmd))
-                                Send("info string illegal move: " + cmd);
-                        }
-                        else
-                        {
-                            Send("info string unknown command: " + cmd);
-                        }
-                        break;
+                    line = line.Trim();
+                    if (line.Length == 0) continue;
+
+                    var space = line.IndexOf(' ');
+                    var cmd = space < 0 ? line : line.Substring(0, space);
+                    var rest = space < 0 ? string.Empty : line.Substring(space + 1).Trim();
+
+                    switch (cmd)
+                    {
+                        case "uci":          HandleUci();              break;
+                        case "isready":      Send("readyok");          break;
+                        case "ucinewgame":   StopActiveSearch(true); _engine.NewGame(); break;
+                        case "position":     HandlePosition(rest);     break;
+                        case "go":           HandleGo(rest);           break;
+                        case "stop":         StopActiveSearch(false);  break;
+                        case "setoption":    /* no options advertised */ break;
+                        case "ponderhit":    /* pondering not supported */ break;
+                        case "debug":        /* ignored */             break;
+                        case "register":     /* ignored */             break;
+                        case "quit":         return;
+                        // Non-standard extensions, emitted as `info string` so GUIs ignore them and
+                        // a human running the engine at a terminal can still use them.
+                        case "d":
+                        case "show":         DrawBoard();              break;
+                        case "fen":          Send("info string " + _engine.FEN); break;
+                        case "eval":         HandleEval(rest);         break;
+                        case "bench":        StopActiveSearch(true); HandleBench(); break;
+                        case "flip":         StopActiveSearch(true); HandleFlip(); break;
+                        case "compiler":     HandleCompiler();         break;
+                        default:
+                            if (LooksLikeMove(cmd))
+                            {
+                                StopActiveSearch(true);
+                                if (!ApplyUciMove(cmd))
+                                    Send("info string illegal move: " + cmd);
+                            }
+                            else
+                            {
+                                Send("info string unknown command: " + cmd);
+                            }
+                            break;
+                    }
                 }
+            }
+            finally
+            {
+                StopActiveSearch(true);
             }
         }
 
-        private static void Send(string s)
+        private void Send(string s)
         {
-            Console.Out.WriteLine(s);
-            Console.Out.Flush();
+            lock (OutputSync)
+            {
+                _output.WriteLine(s);
+                _output.Flush();
+            }
         }
 
         private void HandleUci()
@@ -95,6 +126,7 @@ namespace ChessCore
         private void HandlePosition(string args)
         {
             if (string.IsNullOrEmpty(args)) return;
+            StopActiveSearch(true);
 
             string fen;
             int movesIdx;
@@ -198,26 +230,70 @@ namespace ChessCore
             }
 
             var (ceiling, deadlineMs) = PickBudget(depth, movetimeMs, wtime, btime, winc, binc, movestogo, infinite);
+            StopActiveSearch(true);
             _engine.PlyDepthSearched = ceiling;
             _engine.SearchDeadlineMs = deadlineMs;
 
-            var sw = Stopwatch.StartNew();
-            var movesBefore = _engine.GetMoveHistory().Count;
-            _engine.AiPonderMove();
-            sw.Stop();
-
-            EmitInfo(sw.ElapsedMilliseconds);
-
-            var movesAfter = _engine.GetMoveHistory().Count;
-            if (movesAfter == movesBefore)
+            var cancellation = new CancellationTokenSource();
+            lock (_searchSync)
             {
-                // No legal move was played (mate / stalemate at search root). UCI null move.
+                _searchCancellation = cancellation;
+                _searchTask = Task.Run(() => RunSearch(cancellation.Token));
+            }
+        }
+
+        private void RunSearch(CancellationToken cancellationToken)
+        {
+            try
+            {
+                var sw = Stopwatch.StartNew();
+                bool emittedIteration = false;
+                EngineSearchResult result = _engine.SearchBestMove(
+                    cancellationToken,
+                    info =>
+                    {
+                        emittedIteration = true;
+                        EmitInfo(info, sw.ElapsedMilliseconds);
+                    });
+                sw.Stop();
+
+                if (!emittedIteration)
+                    EmitInfo(result.Info, sw.ElapsedMilliseconds);
+                Send("bestmove " + (result.HasMove ? result.BestMove : "0000"));
+            }
+            catch (Exception ex)
+            {
+                Send("info string search failed: " + ex.Message);
                 Send("bestmove 0000");
-                return;
+            }
+        }
+
+        private void StopActiveSearch(bool waitForCompletion)
+        {
+            CancellationTokenSource cancellation;
+            Task task;
+            lock (_searchSync)
+            {
+                cancellation = _searchCancellation;
+                task = _searchTask;
             }
 
-            var last = _engine.GetMoveHistory().Peek();
-            Send("bestmove " + MoveToUci(last));
+            cancellation?.Cancel();
+            if (waitForCompletion && task != null && !task.IsCompleted)
+                task.GetAwaiter().GetResult();
+
+            if (waitForCompletion && task != null)
+            {
+                lock (_searchSync)
+                {
+                    if (ReferenceEquals(task, _searchTask))
+                    {
+                        _searchTask = null;
+                        _searchCancellation = null;
+                    }
+                }
+                cancellation?.Dispose();
+            }
         }
 
         // Map UCI `go` arguments to a (depth ceiling, wall-clock deadline) pair for the engine.
@@ -269,44 +345,23 @@ namespace ChessCore
             return (HighCeiling, deadline);
         }
 
-        private void EmitInfo(long elapsedMs)
+        private void EmitInfo(EngineSearchInfo info, long elapsedMs)
         {
-            // SearchScore is the alpha returned by the root search, already from the
-            // searching side's POV in centipawns — exactly what UCI expects.
-            int score = _engine.SearchScore;
-
-            long nodes = (long)_engine.NodesSearched + _engine.NodesQuiessence;
+            long nodes = info.TotalNodes;
             long nps = elapsedMs > 0 ? (nodes * 1000L) / elapsedMs : 0;
 
-            // Mate scores in Search.cs are encoded as ±(32767 + remaining_depth), so a
-            // larger absolute value means a shorter mate. Convert to UCI's "mate N" (N
-            // full moves to mate) by counting plies from the score magnitude.
-            string scoreField;
-            if (score >= 32767)
-            {
-                int pliesToMate = Math.Max(1, score - 32767);
-                int movesToMate = (pliesToMate + 1) / 2;
-                scoreField = "mate " + movesToMate;
-            }
-            else if (score <= -32767)
-            {
-                int pliesToMate = Math.Max(1, -score - 32767);
-                int movesToMate = (pliesToMate + 1) / 2;
-                scoreField = "mate -" + movesToMate;
-            }
-            else
-            {
-                scoreField = "cp " + score;
-            }
+            string scoreField = info.IsMate
+                ? "mate " + info.MateInMoves.ToString(CultureInfo.InvariantCulture)
+                : "cp " + info.Score.ToString(CultureInfo.InvariantCulture);
 
             // PV from the search (space-separated long-algebraic moves like "e2e4 e7e5 ...").
             // Empty when a book move was played — that's expected and UCI-legal.
-            string pv = _engine.PvLine ?? "";
+            string pv = info.PrincipalVariation ?? "";
             string pvField = pv.Length > 0 ? " pv " + pv : "";
 
             Send(string.Format(CultureInfo.InvariantCulture,
                 "info depth {0} score {1} nodes {2} nps {3} time {4}{5}",
-                _engine.PlyDepthReached, scoreField, nodes, nps, elapsedMs, pvField));
+                info.Depth, scoreField, nodes, nps, elapsedMs, pvField));
         }
 
         private static bool LooksLikeMove(string s)
@@ -373,7 +428,7 @@ namespace ChessCore
                 _engine.WhoseMove, FormatSigned(stmPov)));
         }
 
-        private static void SendEvalTerm(string label, int value)
+        private void SendEvalTerm(string label, int value)
         {
             Send(string.Format(CultureInfo.InvariantCulture,
                 "info string {0,-26} {1} cp", label, FormatSigned(value)));
@@ -384,8 +439,8 @@ namespace ChessCore
                 ? "+" + value.ToString(CultureInfo.InvariantCulture)
                 : value.ToString(CultureInfo.InvariantCulture);
 
-        // Compact set of well-known test positions. Search runs synchronously; depth 5 keeps
-        // total bench time under ~10s on a modern dev box while still exercising the search.
+        // Compact set of well-known test positions. The benchmark invokes each depth-5 search
+        // serially, keeping total time under ~10s while still exercising the search.
         private static readonly (string Name, string Fen)[] BenchPositions = new[]
         {
             ("Start",        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"),

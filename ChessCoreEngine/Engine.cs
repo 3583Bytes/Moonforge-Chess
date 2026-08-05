@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Threading;
 
 namespace ChessEngine.Engine // Reverted to original namespace
 {
@@ -973,6 +974,113 @@ namespace ChessEngine.Engine // Reverted to original namespace
         #endregion
 
         #region Search
+
+        /// <summary>
+        /// Searches the current position without applying the selected move.
+        /// Completed iterative-deepening results are reported through
+        /// <paramref name="iterationCompleted"/>.
+        /// </summary>
+        public EngineSearchResult SearchBestMove(
+            CancellationToken cancellationToken,
+            Action<EngineSearchInfo> iterationCompleted = null)
+        {
+            NodesSearched = 0;
+            NodesQuiessence = 0;
+            PlyDepthReached = 0;
+            SearchScore = 0;
+            pvLine = string.Empty;
+
+            if (ChessBoard.HalfMoveClock <= 90 && ChessBoard.RepeatedMove < 2)
+            {
+                var bookMove = new MoveContent();
+                if (FindPlayBookMove(ref bookMove, ChessBoard, OpeningBook)
+                    || FindPlayBookMove(ref bookMove, ChessBoard, CurrentGameBook))
+                {
+                    string coordinate = CoordinateMove(
+                        bookMove.MovingPiecePrimary.SrcPosition,
+                        bookMove.MovingPiecePrimary.DstPosition,
+                        bookMove.PawnPromotedTo);
+                    pvLine = coordinate;
+                    return new EngineSearchResult
+                    {
+                        HasMove = true,
+                        FromBook = true,
+                        BestMove = coordinate,
+                        Info = new EngineSearchInfo { PrincipalVariation = coordinate }
+                    };
+                }
+            }
+
+            Position position = Position.FromFen(Board.Fen(false, ChessBoard));
+            EngineSearchInfo lastInfo = null;
+            Move best = BitboardSearch.FindBestMove(
+                position, PlyDepthSearched, SearchDeadlineMs, cancellationToken,
+                iteration =>
+                {
+                    var info = new EngineSearchInfo
+                    {
+                        Depth = iteration.Depth,
+                        Score = iteration.Score,
+                        Nodes = iteration.Nodes,
+                        QuiescenceNodes = iteration.QuiescenceNodes,
+                        PrincipalVariation = iteration.BestMove.ToString()
+                    };
+                    lastInfo = info;
+                    SearchScore = info.Score;
+                    PlyDepthReached = (byte)info.Depth;
+                    NodesSearched = (int)info.Nodes;
+                    NodesQuiessence = (int)info.QuiescenceNodes;
+                    pvLine = info.PrincipalVariation;
+                    iterationCompleted?.Invoke(info);
+                },
+                out int score, out int depthReached);
+
+            SearchScore = score;
+            PlyDepthReached = (byte)depthReached;
+            NodesSearched = (int)BitboardSearch.NodesSearched;
+            NodesQuiessence = (int)BitboardSearch.NodesQuiescence;
+
+            bool hasMove = best.From != best.To;
+            string bestMove = hasMove ? best.ToString() : string.Empty;
+            if (lastInfo == null)
+            {
+                lastInfo = new EngineSearchInfo
+                {
+                    Depth = depthReached,
+                    Score = score,
+                    Nodes = BitboardSearch.NodesSearched,
+                    QuiescenceNodes = BitboardSearch.NodesQuiescence,
+                    PrincipalVariation = bestMove
+                };
+            }
+            pvLine = lastInfo.PrincipalVariation;
+
+            return new EngineSearchResult
+            {
+                HasMove = hasMove,
+                BestMove = bestMove,
+                Info = lastInfo
+            };
+        }
+
+        public EngineSearchResult SearchBestMove()
+            => SearchBestMove(CancellationToken.None);
+
+        private static string CoordinateMove(byte from, byte to, ChessPieceType promotion)
+        {
+            string Square(byte square)
+                => $"{(char)('a' + square % 8)}{8 - square / 8}";
+
+            string move = Square(from) + Square(to);
+            return promotion switch
+            {
+                ChessPieceType.Queen => move + "q",
+                ChessPieceType.Rook => move + "r",
+                ChessPieceType.Bishop => move + "b",
+                ChessPieceType.Knight => move + "n",
+                _ => move
+            };
+        }
 
         // Runs the bitboard search from the current board and returns the chosen move
         // as a MoveContent (with the moving piece's identity), so the existing

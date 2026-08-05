@@ -28,8 +28,8 @@ namespace ChessEngine.Engine
         internal const byte FlagLower = 2;   // score is a lower bound (we cut off on beta)
         internal const byte FlagUpper = 3;   // score is an upper bound (no move beat alpha)
 
-        // Mate scores are 32767±depth in this engine; treat anything outside ±30000
-        // as a mate (or as the ±infinity bound from the root window) and skip.
+        // Mate scores are ±(1,000,000 - plies-to-mate); treat anything outside
+        // ±30000 as a mate (or as the ±infinity root bound) and skip.
         internal const int MateThreshold = 30000;
 
         internal struct Entry

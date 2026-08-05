@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
 
 namespace ChessEngine.Engine
 {
@@ -16,7 +17,7 @@ namespace ChessEngine.Engine
     // legacy fresh-load scores.
     internal static class BitboardSearch
     {
-        private const int Mate = 1_000_000;   // base mate score, depth-adjusted
+        private const int Mate = EngineSearchInfo.MateScore;
         private const int Inf = 2_000_000;
         private const int MateThreshold = Mate - 1000;
         private const int MaxPly = 64;
@@ -34,14 +35,36 @@ namespace ChessEngine.Engine
         private static long _deadlineTicks;
         private static bool _aborted;
         private static int _abortCounter;
+        private static CancellationToken _cancellationToken;
+
+        internal readonly struct IterationInfo
+        {
+            internal readonly Move BestMove;
+            internal readonly int Score;
+            internal readonly int Depth;
+            internal readonly long Nodes;
+            internal readonly long QuiescenceNodes;
+
+            internal IterationInfo(Move bestMove, int score, int depth,
+                                   long nodes, long quiescenceNodes)
+            {
+                BestMove = bestMove;
+                Score = score;
+                Depth = depth;
+                Nodes = nodes;
+                QuiescenceNodes = quiescenceNodes;
+            }
+        }
 
         private static bool CheckAbort()
         {
             if (_aborted) return true;
-            if (_deadlineTicks == 0) return false;
+            if (_deadlineTicks == 0 && !_cancellationToken.CanBeCanceled) return false;
             if (++_abortCounter < AbortCheckInterval) return false;
             _abortCounter = 0;
-            if (Stopwatch.GetTimestamp() >= _deadlineTicks) _aborted = true;
+            if (_cancellationToken.IsCancellationRequested
+                || (_deadlineTicks != 0 && Stopwatch.GetTimestamp() >= _deadlineTicks))
+                _aborted = true;
             return _aborted;
         }
 
@@ -59,11 +82,19 @@ namespace ChessEngine.Engine
 
         internal static Move FindBestMove(Position root, int maxDepth, long deadlineMs,
                                           out int score, out int depthReached)
+            => FindBestMove(root, maxDepth, deadlineMs, CancellationToken.None, null,
+                            out score, out depthReached);
+
+        internal static Move FindBestMove(Position root, int maxDepth, long deadlineMs,
+                                          CancellationToken cancellationToken,
+                                          Action<IterationInfo> iterationCompleted,
+                                          out int score, out int depthReached)
         {
             NodesSearched = 0;
             NodesQuiescence = 0;
             _aborted = false;
             _abortCounter = 0;
+            _cancellationToken = cancellationToken;
             _deadlineTicks = deadlineMs > 0
                 ? Stopwatch.GetTimestamp() + (long)(deadlineMs * Stopwatch.Frequency / 1000L)
                 : 0;
@@ -75,17 +106,26 @@ namespace ChessEngine.Engine
 
             var rootMoves = new List<Move>(64);
             MoveGen.GenerateLegal(root, rootMoves);
-            if (rootMoves.Count == 0) return default;
+            if (rootMoves.Count == 0)
+            {
+                score = MoveGen.InCheck(root, root.SideToMove) ? -Mate : 0;
+                return default;
+            }
 
             // Endgame / low-mobility depth boost, matching the legacy search's
             // ModifyDepth: small branching factor lets us afford 1-2 extra plies.
             maxDepth = ModifyDepth(maxDepth, rootMoves.Count, Bitboards.PopCount(root.OccAll));
 
             Move best = rootMoves[0];
-            int bestScore = -Inf;
+            // A stop can arrive before depth 1 starts. Keep a meaningful static
+            // score and a legal fallback move instead of leaking the -infinity
+            // root sentinel into UCI output.
+            int bestScore = Eval(root);
 
             for (int depth = 1; depth <= maxDepth; depth++)
             {
+                if (cancellationToken.IsCancellationRequested) break;
+
                 int alpha = -Inf;
                 Move iterBest = best;
                 int iterBestScore = -Inf;
@@ -114,6 +154,9 @@ namespace ChessEngine.Engine
                 best = iterBest;
                 bestScore = iterBestScore;
                 depthReached = depth;
+
+                iterationCompleted?.Invoke(new IterationInfo(
+                    best, bestScore, depth, NodesSearched, NodesQuiescence));
 
                 if (bestScore >= MateThreshold) break; // forced mate found
             }
@@ -168,7 +211,7 @@ namespace ChessEngine.Engine
             MoveGen.GenerateLegal(p, moves);
 
             if (moves.Count == 0)
-                return inCheck ? -(Mate + depth) : 0; // checkmate or stalemate
+                return inCheck ? -(Mate - ply) : 0; // checkmate or stalemate
 
             Move ttMove = (ttSrc != 0 || ttDst != 0) ? new Move(ttSrc, ttDst) : default;
             OrderMoves(p, moves, ttMove, ply);
