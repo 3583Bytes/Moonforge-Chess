@@ -58,9 +58,10 @@ EngineSearchResult result = engine.SearchBestMove(
 Console.WriteLine(result.HasMove ? result.BestMove : "(no legal move)");
 ```
 
-`EngineSearchInfo.IsMate` and `MateInMoves` distinguish mate scores from ordinary
-centipawn evaluations. `AiPonderMove()` remains available when search-and-play is
-the desired operation.
+`EngineSearchInfo.PrincipalVariation` contains the complete predicted line as
+space-separated UCI moves. `IsMate` and `MateInMoves` distinguish mate scores from
+ordinary centipawn evaluations. `AiPonderMove()` remains available when
+search-and-play is the desired operation.
 
 ## License
 

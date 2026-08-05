@@ -1023,7 +1023,7 @@ namespace ChessEngine.Engine // Reverted to original namespace
                         Score = iteration.Score,
                         Nodes = iteration.Nodes,
                         QuiescenceNodes = iteration.QuiescenceNodes,
-                        PrincipalVariation = iteration.BestMove.ToString()
+                        PrincipalVariation = FormatPrincipalVariation(iteration.PrincipalVariation)
                     };
                     lastInfo = info;
                     SearchScore = info.Score;
@@ -1065,6 +1065,16 @@ namespace ChessEngine.Engine // Reverted to original namespace
 
         public EngineSearchResult SearchBestMove()
             => SearchBestMove(CancellationToken.None);
+
+        private static string FormatPrincipalVariation(Move[] moves)
+        {
+            if (moves == null || moves.Length == 0) return string.Empty;
+
+            var coordinates = new string[moves.Length];
+            for (int index = 0; index < moves.Length; index++)
+                coordinates[index] = moves[index].ToString();
+            return string.Join(" ", coordinates);
+        }
 
         private static string CoordinateMove(byte from, byte to, ChessPieceType promotion)
         {

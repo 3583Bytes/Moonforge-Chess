@@ -30,6 +30,13 @@ namespace ChessEngine.Engine
         private const int HistoryMax = 512;
         private static readonly int[,,] _history = new int[2, 64, 64];
 
+        // Principal-variation table. Row `ply` contains the best line beginning at
+        // that ply; when a move raises alpha we prepend it to the child's row. The
+        // root row is copied after each completed iteration so a later aborted
+        // iteration cannot corrupt the last publishable result.
+        private static readonly Move[,] _pvTable = new Move[MaxPly, MaxPly];
+        private static readonly int[] _pvLength = new int[MaxPly];
+
         // Time-abort plumbing (same approach as the legacy search).
         private const int AbortCheckInterval = 2048;
         private static long _deadlineTicks;
@@ -44,15 +51,18 @@ namespace ChessEngine.Engine
             internal readonly int Depth;
             internal readonly long Nodes;
             internal readonly long QuiescenceNodes;
+            internal readonly Move[] PrincipalVariation;
 
             internal IterationInfo(Move bestMove, int score, int depth,
-                                   long nodes, long quiescenceNodes)
+                                   long nodes, long quiescenceNodes,
+                                   Move[] principalVariation)
             {
                 BestMove = bestMove;
                 Score = score;
                 Depth = depth;
                 Nodes = nodes;
                 QuiescenceNodes = quiescenceNodes;
+                PrincipalVariation = principalVariation;
             }
         }
 
@@ -100,6 +110,7 @@ namespace ChessEngine.Engine
                 : 0;
             Array.Clear(_history, 0, _history.Length);
             Array.Clear(_killers, 0, _killers.Length);
+            Array.Clear(_pvLength, 0, _pvLength.Length);
 
             score = 0;
             depthReached = 0;
@@ -117,6 +128,7 @@ namespace ChessEngine.Engine
             maxDepth = ModifyDepth(maxDepth, rootMoves.Count, Bitboards.PopCount(root.OccAll));
 
             Move best = rootMoves[0];
+            bool reportPrincipalVariation = iterationCompleted != null;
             // A stop can arrive before depth 1 starts. Keep a meaningful static
             // score and a legal fallback move instead of leaking the -infinity
             // root sentinel into UCI output.
@@ -130,13 +142,15 @@ namespace ChessEngine.Engine
                 Move iterBest = best;
                 int iterBestScore = -Inf;
                 bool completed = true;
+                _pvLength[0] = 0;
 
                 OrderMoves(root, rootMoves, best, 0);
 
                 foreach (Move m in rootMoves)
                 {
                     root.MakeMove(m);
-                    int value = -AlphaBeta(root, depth - 1, -Inf, -alpha, 1, true, false);
+                    int value = -AlphaBeta(root, depth - 1, -Inf, -alpha, 1,
+                                           true, false, reportPrincipalVariation);
                     root.UnmakeMove(m);
 
                     if (_aborted) { completed = false; break; }
@@ -145,6 +159,7 @@ namespace ChessEngine.Engine
                     {
                         iterBestScore = value;
                         iterBest = m;
+                        UpdatePrincipalVariation(0, m);
                         if (value > alpha) alpha = value;
                     }
                 }
@@ -156,7 +171,8 @@ namespace ChessEngine.Engine
                 depthReached = depth;
 
                 iterationCompleted?.Invoke(new IterationInfo(
-                    best, bestScore, depth, NodesSearched, NodesQuiescence));
+                    best, bestScore, depth, NodesSearched, NodesQuiescence,
+                    CopyRootPrincipalVariation(best)));
 
                 if (bestScore >= MateThreshold) break; // forced mate found
             }
@@ -166,9 +182,10 @@ namespace ChessEngine.Engine
         }
 
         private static int AlphaBeta(Position p, int depth, int alpha, int beta, int ply,
-                                     bool allowNull, bool extended)
+                                     bool allowNull, bool extended, bool pvNode)
         {
             NodesSearched++;
+            if (ply < MaxPly) _pvLength[ply] = ply;
             if (CheckAbort()) return 0;
             if (p.HalfmoveClock >= 100) return 0; // 50-move draw
 
@@ -185,8 +202,16 @@ namespace ChessEngine.Engine
             // Transposition table probe.
             ulong ttKey = p.Hash;
             int origAlpha = alpha;
-            if (TranspositionTable.Probe(ttKey, (byte)depth, alpha, beta, out int ttScore, out byte ttSrc, out byte ttDst))
+            bool ttCutoff = TranspositionTable.Probe(
+                ttKey, (byte)depth, alpha, beta,
+                out int ttScore, out byte ttSrc, out byte ttDst,
+                out ChessPieceType ttPromotion);
+            if (ttCutoff)
+            {
+                if (pvNode)
+                    RestorePrincipalVariationFromTable(p, depth, ply);
                 return ttScore;
+            }
 
             // Reverse futility pruning (static null move).
             if (depth <= 6 && !inCheck && Math.Abs(beta) < 30000)
@@ -201,7 +226,8 @@ namespace ChessEngine.Engine
                 && HasNonPawnMaterial(p))
             {
                 p.MakeNullMove();
-                int nullScore = -AlphaBeta(p, depth - 1 - NullR, -beta, -beta + 1, ply + 1, false, extended);
+                int nullScore = -AlphaBeta(p, depth - 1 - NullR, -beta, -beta + 1,
+                                           ply + 1, false, extended, false);
                 p.UnmakeNullMove();
                 if (_aborted) return 0;
                 if (nullScore >= beta) return beta;
@@ -213,11 +239,14 @@ namespace ChessEngine.Engine
             if (moves.Count == 0)
                 return inCheck ? -(Mate - ply) : 0; // checkmate or stalemate
 
-            Move ttMove = (ttSrc != 0 || ttDst != 0) ? new Move(ttSrc, ttDst) : default;
+            Move ttMove = (ttSrc != 0 || ttDst != 0)
+                ? new Move(ttSrc, ttDst, MoveFlag.Normal, ttPromotion)
+                : default;
             OrderMoves(p, moves, ttMove, ply);
 
             int us = p.SideToMove;
             byte bestSrc = 0, bestDst = 0;
+            ChessPieceType bestPromotion = ChessPieceType.None;
             int legalCount = 0;
             bool pvSearched = false; // PVS: first move full-window, rest scouted
 
@@ -251,18 +280,23 @@ namespace ChessEngine.Engine
                 if (!pvSearched)
                 {
                     // First move = the principal variation candidate: full window.
-                    value = -AlphaBeta(p, depth - 1 - reduction, -beta, -alpha, ply + 1, true, extended);
+                    value = -AlphaBeta(p, depth - 1 - reduction, -beta, -alpha,
+                                       ply + 1, true, extended, reduction == 0 && pvNode);
                     if (reduction > 0 && value > alpha)
-                        value = -AlphaBeta(p, depth - 1, -beta, -alpha, ply + 1, true, extended);
+                        value = -AlphaBeta(p, depth - 1, -beta, -alpha,
+                                           ply + 1, true, extended, pvNode);
                 }
                 else
                 {
                     // Later moves: scout with a null window; only re-search if it beats alpha.
-                    value = -AlphaBeta(p, depth - 1 - reduction, -alpha - 1, -alpha, ply + 1, true, extended);
+                    value = -AlphaBeta(p, depth - 1 - reduction, -alpha - 1, -alpha,
+                                       ply + 1, true, extended, false);
                     if (reduction > 0 && value > alpha) // reduced scout surprised us → full depth, still null window
-                        value = -AlphaBeta(p, depth - 1, -alpha - 1, -alpha, ply + 1, true, extended);
+                        value = -AlphaBeta(p, depth - 1, -alpha - 1, -alpha,
+                                           ply + 1, true, extended, false);
                     if (value > alpha && value < beta) // scout failed high inside the window → full re-search
-                        value = -AlphaBeta(p, depth - 1, -beta, -alpha, ply + 1, true, extended);
+                        value = -AlphaBeta(p, depth - 1, -beta, -alpha,
+                                           ply + 1, true, extended, pvNode);
                 }
 
                 p.UnmakeMove(m);
@@ -271,13 +305,15 @@ namespace ChessEngine.Engine
 
                 if (value >= beta)
                 {
+                    UpdatePrincipalVariation(ply, m);
                     if (isQuiet)
                     {
                         StoreKiller(m, ply);
                         BumpHistory(us, m, depth);
                     }
                     if (Math.Abs(beta) < MateThreshold)
-                        TranspositionTable.Store(ttKey, beta, (byte)depth, TranspositionTable.FlagLower, m.From, m.To);
+                        TranspositionTable.Store(ttKey, beta, (byte)depth,
+                            TranspositionTable.FlagLower, m.From, m.To, m.Promotion);
                     return beta;
                 }
                 if (value > alpha)
@@ -285,6 +321,8 @@ namespace ChessEngine.Engine
                     alpha = value;
                     bestSrc = m.From;
                     bestDst = m.To;
+                    bestPromotion = m.Promotion;
+                    UpdatePrincipalVariation(ply, m);
                 }
 
                 pvSearched = true; // subsequent moves are scouted against the current alpha
@@ -292,8 +330,80 @@ namespace ChessEngine.Engine
 
             byte flag = alpha > origAlpha ? TranspositionTable.FlagExact : TranspositionTable.FlagUpper;
             if (Math.Abs(alpha) < MateThreshold)
-                TranspositionTable.Store(ttKey, alpha, (byte)depth, flag, bestSrc, bestDst);
+                TranspositionTable.Store(ttKey, alpha, (byte)depth, flag,
+                    bestSrc, bestDst, bestPromotion);
             return alpha;
+        }
+
+        private static void UpdatePrincipalVariation(int ply, Move move)
+        {
+            if (ply >= MaxPly) return;
+
+            _pvTable[ply, ply] = move;
+            int childPly = ply + 1;
+            int end = childPly < MaxPly
+                ? Math.Max(childPly, Math.Min(_pvLength[childPly], MaxPly))
+                : MaxPly;
+
+            for (int index = childPly; index < end; index++)
+                _pvTable[ply, index] = _pvTable[childPly, index];
+
+            _pvLength[ply] = end;
+        }
+
+        private static Move[] CopyRootPrincipalVariation(Move fallback)
+        {
+            int length = _pvLength[0];
+            if (length <= 0)
+                return new[] { fallback };
+
+            var result = new Move[length];
+            for (int index = 0; index < length; index++)
+                result[index] = _pvTable[0, index];
+            return result;
+        }
+
+        private static void RestorePrincipalVariationFromTable(Position position, int depth, int ply)
+        {
+            if (ply >= MaxPly) return;
+
+            var madeMoves = new List<Move>(Math.Min(depth, MaxPly - ply));
+            int currentPly = ply;
+            int remainingDepth = depth;
+
+            while (remainingDepth > 0 && currentPly < MaxPly
+                && TranspositionTable.TryGetMove(
+                    position.Hash, remainingDepth,
+                    out byte source, out byte destination,
+                    out ChessPieceType promotion))
+            {
+                var legalMoves = new List<Move>(64);
+                MoveGen.GenerateLegal(position, legalMoves);
+                Move? selected = null;
+                foreach (Move move in legalMoves)
+                {
+                    if (move.From == source && move.To == destination
+                        && move.Promotion == promotion)
+                    {
+                        selected = move;
+                        break;
+                    }
+                }
+
+                if (!selected.HasValue) break;
+
+                Move pvMove = selected.Value;
+                _pvTable[ply, currentPly] = pvMove;
+                madeMoves.Add(pvMove);
+                position.MakeMove(pvMove);
+                currentPly++;
+                remainingDepth--;
+            }
+
+            for (int index = madeMoves.Count - 1; index >= 0; index--)
+                position.UnmakeMove(madeMoves[index]);
+
+            _pvLength[ply] = currentPly;
         }
 
         private static int Quiescence(Position p, int alpha, int beta, int qsPly)

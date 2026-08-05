@@ -34,18 +34,22 @@ public class EngineSearchTests
     public void SearchBestMove_ReportsEveryCompletedIteration()
     {
         var engine = new Engine(Kiwipete) { PlyDepthSearched = 3 };
-        var depths = new List<int>();
+        var iterations = new List<EngineSearchInfo>();
 
         EngineSearchResult result = engine.SearchBestMove(
             CancellationToken.None,
-            info => depths.Add(info.Depth));
+            info => iterations.Add(info));
 
         Assert.Multiple(() =>
         {
-            Assert.That(depths, Is.EqualTo(new[] { 1, 2, 3 }));
+            Assert.That(iterations.Select(info => info.Depth), Is.EqualTo(new[] { 1, 2, 3 }));
+            Assert.That(iterations.Select(info => PvMoves(info).Length), Is.EqualTo(new[] { 1, 2, 3 }));
             Assert.That(result.Info.Depth, Is.EqualTo(3));
-            Assert.That(result.Info.PrincipalVariation, Is.EqualTo(result.BestMove));
+            Assert.That(PvMoves(result.Info), Has.Length.EqualTo(3));
+            Assert.That(PvMoves(result.Info)[0], Is.EqualTo(result.BestMove));
         });
+        foreach (EngineSearchInfo iteration in iterations)
+            AssertPrincipalVariationIsLegal(Kiwipete, iteration);
     }
 
     [Test]
@@ -65,8 +69,10 @@ public class EngineSearchTests
         {
             Assert.That(result.HasMove, Is.True);
             Assert.That(result.Info.Depth, Is.EqualTo(2));
-            Assert.That(result.BestMove, Is.EqualTo(result.Info.PrincipalVariation));
+            Assert.That(PvMoves(result.Info), Has.Length.EqualTo(2));
+            Assert.That(PvMoves(result.Info)[0], Is.EqualTo(result.BestMove));
         });
+        AssertPrincipalVariationIsLegal(Kiwipete, result.Info);
     }
 
     [Test]
@@ -85,6 +91,16 @@ public class EngineSearchTests
             Assert.That(result.Info.Score, Is.EqualTo(EngineSearchInfo.MateScore - 1));
             Assert.That(result.Info.IsMate, Is.True);
             Assert.That(result.Info.MateInMoves, Is.EqualTo(1));
+            Assert.That(result.Info.PrincipalVariation, Is.EqualTo("g6g8"));
+        });
+        Position final = ReplayPrincipalVariation(
+            "k7/7R/6R1/8/8/8/8/K7 w - - 0 1", result.Info);
+        var replies = new List<Move>();
+        MoveGen.GenerateLegal(final, replies);
+        Assert.Multiple(() =>
+        {
+            Assert.That(replies, Is.Empty);
+            Assert.That(MoveGen.InCheck(final, final.SideToMove), Is.True);
         });
     }
 
@@ -102,5 +118,53 @@ public class EngineSearchTests
             Assert.That(info.IsMate, Is.True);
             Assert.That(info.MateInMoves, Is.EqualTo(-1));
         });
+    }
+
+    [Test]
+    public void PromotionPrincipalVariation_UsesUciNotationAndIsLegal()
+    {
+        const string fen = "6nk/4Pppp/8/8/8/8/PPPPPPPP/K7 w - - 0 1";
+        var engine = new Engine(fen) { PlyDepthSearched = 3 };
+
+        engine.SearchBestMove(); // warm the TT so the second PV exercises reconstruction
+        EngineSearchResult result = engine.SearchBestMove();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.BestMove, Is.EqualTo("e7e8q"));
+            Assert.That(PvMoves(result.Info)[0], Is.EqualTo("e7e8q"));
+            Assert.That(PvMoves(result.Info), Has.Length.EqualTo(3));
+        });
+        AssertPrincipalVariationIsLegal(fen, result.Info);
+    }
+
+    private static string[] PvMoves(EngineSearchInfo info)
+        => info.PrincipalVariation.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+    private static void AssertPrincipalVariationIsLegal(string fen, EngineSearchInfo info)
+        => ReplayPrincipalVariation(fen, info);
+
+    private static Position ReplayPrincipalVariation(string fen, EngineSearchInfo info)
+    {
+        Position position = Position.FromFen(fen);
+        foreach (string notation in PvMoves(info))
+        {
+            var legalMoves = new List<Move>();
+            MoveGen.GenerateLegal(position, legalMoves);
+            Move? selected = null;
+            foreach (Move move in legalMoves)
+            {
+                if (move.ToString() == notation)
+                {
+                    selected = move;
+                    break;
+                }
+            }
+
+            Assert.That(selected.HasValue, Is.True,
+                $"PV move {notation} is illegal after replaying {info.PrincipalVariation}");
+            position.MakeMove(selected!.Value);
+        }
+        return position;
     }
 }

@@ -63,6 +63,37 @@ public class UciProtocolTests
     }
 
     [Test]
+    public void FixedDepthSearch_EmitsTheFullPrincipalVariation()
+    {
+        using var input = new BlockingLineReader();
+        var output = new RecordingWriter();
+        var protocol = new UciProtocol(input, output);
+        Task run = Task.Run(protocol.Run);
+
+        input.Add("position fen " + Kiwipete);
+        input.Add("go depth 3");
+
+        Assert.That(output.WaitFor(line => line.StartsWith("info depth 3 "), 5000), Is.True);
+        Assert.That(output.WaitFor(line => line.StartsWith("bestmove "), 5000), Is.True);
+
+        string depthThree = output.Lines.Last(line => line.StartsWith("info depth 3 "));
+        string bestMove = output.Lines.Last(line => line.StartsWith("bestmove ")).Substring(9);
+        int pvIndex = depthThree.IndexOf(" pv ", StringComparison.Ordinal);
+        Assert.That(pvIndex, Is.GreaterThanOrEqualTo(0));
+        string[] pv = depthThree.Substring(pvIndex + 4)
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        Assert.Multiple(() =>
+        {
+            Assert.That(pv, Has.Length.EqualTo(3));
+            Assert.That(pv[0], Is.EqualTo(bestMove));
+        });
+
+        input.Add("quit");
+        input.Complete();
+        Assert.That(run.Wait(3000), Is.True);
+    }
+
+    [Test]
     public void QuitDuringSearch_CancelsAndReturnsOneBestMove()
     {
         using var input = new BlockingLineReader();

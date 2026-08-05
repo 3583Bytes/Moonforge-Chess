@@ -12,6 +12,9 @@ namespace ChessEngine.Engine
         public int Score { get; internal set; }
         public long Nodes { get; internal set; }
         public long QuiescenceNodes { get; internal set; }
+        /// <summary>
+        /// Best line found, as space-separated UCI coordinate moves.
+        /// </summary>
         public string PrincipalVariation { get; internal set; } = string.Empty;
 
         public long TotalNodes => Nodes + QuiescenceNodes;

@@ -40,6 +40,7 @@ namespace ChessEngine.Engine
             internal byte Flag;
             internal byte SrcPosition;
             internal byte DstPosition;
+            internal ChessPieceType Promotion;
         }
 
         // 2^20 entries × ~24 bytes per struct ≈ 24 MB. Bumping the exponent is
@@ -59,12 +60,14 @@ namespace ChessEngine.Engine
         // value to return from the caller. The bestMove fields are set whenever
         // an entry matched, even if no cutoff — caller uses them for ordering.
         internal static bool Probe(ulong key, byte depth, int alpha, int beta,
-            out int score, out byte bestSrc, out byte bestDst)
+            out int score, out byte bestSrc, out byte bestDst,
+            out ChessPieceType promotion)
         {
             ref Entry e = ref Table[key & Mask];
             score = 0;
             bestSrc = 0;
             bestDst = 0;
+            promotion = ChessPieceType.None;
 
             if (e.Key != key || e.Flag == 0)
                 return false;
@@ -77,6 +80,7 @@ namespace ChessEngine.Engine
             {
                 bestSrc = e.SrcPosition;
                 bestDst = e.DstPosition;
+                promotion = e.Promotion;
             }
 
             if (e.Depth < depth)
@@ -103,8 +107,29 @@ namespace ChessEngine.Engine
             return false;
         }
 
+        // PV reconstruction needs depth-1 moves too, while normal move ordering
+        // deliberately ignores such shallow hints. This returns only a move;
+        // score/bound validation remains the responsibility of Probe.
+        internal static bool TryGetMove(ulong key, int minimumDepth,
+            out byte source, out byte destination, out ChessPieceType promotion)
+        {
+            ref Entry e = ref Table[key & Mask];
+            source = 0;
+            destination = 0;
+            promotion = ChessPieceType.None;
+
+            if (e.Key != key || e.Flag == 0 || e.Depth < minimumDepth
+                || (e.SrcPosition == 0 && e.DstPosition == 0))
+                return false;
+
+            source = e.SrcPosition;
+            destination = e.DstPosition;
+            promotion = e.Promotion;
+            return true;
+        }
+
         internal static void Store(ulong key, int score, byte depth, byte flag,
-            byte bestSrc, byte bestDst)
+            byte bestSrc, byte bestDst, ChessPieceType promotion)
         {
             if (score > MateThreshold || score < -MateThreshold)
                 return;
@@ -128,6 +153,7 @@ namespace ChessEngine.Engine
             e.Flag = flag;
             e.SrcPosition = bestSrc;
             e.DstPosition = bestDst;
+            e.Promotion = promotion;
         }
     }
 }

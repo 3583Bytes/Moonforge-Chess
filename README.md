@@ -28,6 +28,7 @@ ballpark rather than a published rating. Strength-affecting changes are gated wi
 
 - Negamax alpha-beta, fail-hard, with iterative deepening at the root
 - Principal variation search (PVS): the first move at each node is searched with the full α–β window; later moves are scouted with a null window and re-searched at the full window only if they beat α
+- Full principal-variation tracking: every completed iteration reports the engine's predicted continuation as legal UCI moves, and cancellation preserves the line from the last completed depth
 - Time-bounded and externally cancellable ID: the search reports every completed depth, aborts the in-progress iteration when its deadline expires or the GUI sends `stop`, and returns the best move from the last fully-completed depth
 - Null move pruning (R=2), skipped in check / at low depth / in low-piece endings (zugzwang) / when |β| is near mate
 - Reverse futility pruning (a.k.a. static null move pruning) at depth ≤ 6: if `staticEval − 100·depth ≥ β`, return immediately. Skipped in check and near mate scores.
@@ -406,5 +407,4 @@ http://www.adamberent.com/wp-content/uploads/2019/02/GuideToProgrammingChessEngi
 Website
 
 http://adamberent.com/home/chess/computer-chess/
-
 
