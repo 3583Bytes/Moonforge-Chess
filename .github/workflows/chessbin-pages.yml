@@ -45,13 +45,6 @@ jobs:
       - name: Publish ChessBin
         run: dotnet publish ChessBin.Web/ChessBin.Web.csproj -c Release -o artifacts/chessbin
 
-      # The repository Pages URL is /Moonforge-Chess/. When chessbin.com is
-      # connected, remove this rewrite so the custom domain uses the root path.
-      - name: Set GitHub Pages base path
-        run: |
-          sed -i 's|<base href="/" />|<base href="/Moonforge-Chess/" />|' artifacts/chessbin/wwwroot/index.html
-          sed -i 's|content="0; url=/"|content="0; url=/Moonforge-Chess/"|' artifacts/chessbin/wwwroot/404.html
-
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
