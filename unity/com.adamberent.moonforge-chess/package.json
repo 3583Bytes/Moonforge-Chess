@@ -1,6 +1,6 @@
 {
   "name": "com.adamberent.moonforge-chess",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "displayName": "Moonforge Chess Engine",
   "description": "A bitboard chess engine library for Unity — alpha-beta search with transposition table, null-move/LMR pruning, quiescence, and positional evaluation, behind a simple Engine API. Self-contained, with a code-generated opening book and no external dependencies. Ships as a .NET Standard 2.1 managed plugin (Unity 2021.2+).",
   "unity": "2021.2",
