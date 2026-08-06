@@ -4,6 +4,21 @@ UCI-compatible chess engine written in C# / .NET 10.
 
 Moonforge Chess implements the [Universal Chess Interface](https://backscattering.de/chess/uci/) protocol on stdin/stdout, so it plugs into any modern chess GUI — [Arena](http://www.playwitharena.de/), [Cute Chess](https://cutechess.com/), [BanksiaGUI](https://banksiagui.com/), [Nibbler](https://github.com/rooklift/nibbler), the ChessBase family, [lichess-bot](https://github.com/lichess-bot-devs/lichess-bot), etc. Earlier versions spoke the XBoard/WinBoard protocol; that has been replaced by UCI as of v1.1.
 
+## Play in the browser
+
+`ChessBin.Web` is a standalone Blazor WebAssembly board that runs the same
+`ChessCoreEngine` entirely in the browser. It supports playing either color,
+four strength presets, legal-move highlighting, promotion, undo, board flipping,
+move history, and an Engine Room with the current evaluation, search depth,
+nodes, full principal variation, and evaluation breakdown.
+
+```powershell
+dotnet run --project ChessBin.Web
+```
+
+Open the local URL printed by .NET. A GitHub Pages workflow builds, tests, and
+publishes the static site when its web or engine sources change.
+
 ## What's inside the engine
 
 The engine is a deliberately readable implementation — single-threaded, no
@@ -408,4 +423,3 @@ http://www.adamberent.com/wp-content/uploads/2019/02/GuideToProgrammingChessEngi
 Website
 
 http://adamberent.com/home/chess/computer-chess/
-

@@ -1,0 +1,69 @@
+name: ChessBin Pages
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - "ChessBin.Web/**"
+      - "ChessBin.Web.Tests/**"
+      - "ChessCoreEngine/**"
+      - ".github/workflows/chessbin-pages.yml"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+
+concurrency:
+  group: chessbin-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Test
+        run: dotnet test ChessCore.sln -c Release
+
+      - name: Publish ChessBin
+        run: dotnet publish ChessBin.Web/ChessBin.Web.csproj -c Release -o artifacts/chessbin
+
+      # The repository Pages URL is /Moonforge-Chess/. When chessbin.com is
+      # connected, remove this rewrite so the custom domain uses the root path.
+      - name: Set GitHub Pages base path
+        run: |
+          sed -i 's|<base href="/" />|<base href="/Moonforge-Chess/" />|' artifacts/chessbin/wwwroot/index.html
+          sed -i 's|content="0; url=/"|content="0; url=/Moonforge-Chess/"|' artifacts/chessbin/wwwroot/404.html
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: artifacts/chessbin/wwwroot
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,357 @@
+@page "/"
+@using ChessEngine.Engine
+@implements IDisposable
+
+<PageTitle>ChessBin · Play Moonforge Chess</PageTitle>
+
+<main class="site-shell">
+    <header class="masthead">
+        <a class="brand" href="" aria-label="ChessBin home">
+            <span class="brand-mark" aria-hidden="true">☾</span>
+            <span>ChessBin</span>
+        </a>
+        <span class="engine-badge"><i></i> Moonforge online</span>
+    </header>
+
+    <section class="hero">
+        <div>
+            <p class="eyebrow">Moonforge Chess · Browser edition</p>
+            <h1>Play the engine.<br /><em>See its thinking.</em></h1>
+        </div>
+        <p class="intro">A handcrafted chess engine running entirely in your browser. No account, no server, just you and the machine.</p>
+    </section>
+
+    <section class="game-layout" aria-label="Chess game">
+        <div class="board-column">
+            <div class="player-strip opponent">
+                <div class="avatar moonforge-avatar" aria-hidden="true">☾</div>
+                <div>
+                    <strong>Moonforge</strong>
+                    <span>@EngineSideLabel</span>
+                </div>
+                @if (_session.IsThinking)
+                {
+                    <span class="thinking"><i></i><i></i><i></i></span>
+                }
+            </div>
+
+            <div class="board-wrap">
+                <div class="chessboard @( _session.IsThinking ? "is-thinking" : "")" role="grid" aria-label="Chess board">
+                    @foreach (BoardSquare square in _session.GetDisplaySquares())
+                    {
+                        <button class="@SquareClass(square)"
+                                type="button"
+                                role="gridcell"
+                                aria-label="@SquareAriaLabel(square)"
+                                disabled="@(!_session.IsHumanTurn || _session.HasPendingPromotion)"
+                                @onclick="() => HandleSquareAsync(square)">
+                            @if (ShowFileLabel(square))
+                            {
+                                <span class="coordinate file">@((char)('a' + square.Column))</span>
+                            }
+                            @if (ShowRankLabel(square))
+                            {
+                                <span class="coordinate rank">@(8 - square.Row)</span>
+                            }
+                            @if (square.IsLegalTarget)
+                            {
+                                <span class="move-target @(square.IsOccupied ? "capture" : "")" aria-hidden="true"></span>
+                            }
+                            @if (square.IsOccupied)
+                            {
+                                <span class="piece @PieceColorClass(square)" aria-hidden="true">@PieceGlyph(square)</span>
+                            }
+                        </button>
+                    }
+                </div>
+
+                @if (_session.HasPendingPromotion)
+                {
+                    <div class="promotion-card" role="dialog" aria-modal="true" aria-label="Choose promotion piece">
+                        <strong>Promote your pawn</strong>
+                        <div class="promotion-pieces">
+                            @foreach (ChessPieceType type in PromotionPieces)
+                            {
+                                <button type="button" aria-label="Promote to @type" @onclick="() => PromoteAsync(type)">@PieceGlyph(type, _session.HumanColor)</button>
+                            }
+                        </div>
+                        <button class="text-button" type="button" @onclick="CancelPromotion">Cancel</button>
+                    </div>
+                }
+            </div>
+
+            <div class="player-strip">
+                <div class="avatar human-avatar" aria-hidden="true">Y</div>
+                <div>
+                    <strong>You</strong>
+                    <span>@HumanSideLabel</span>
+                </div>
+            </div>
+
+            <div class="status-line" aria-live="polite">
+                <span class="status-icon">@StatusIcon</span>
+                <span>@_session.Status</span>
+            </div>
+        </div>
+
+        <aside class="control-panel">
+            <div class="panel-tabs" role="tablist">
+                <button class="active" type="button" role="tab" aria-selected="true">Game</button>
+                <span>Engine room</span>
+            </div>
+
+            <section class="panel-section setup-section">
+                <label>
+                    <span>Play as</span>
+                    <select @bind="_selectedSide" disabled="@_session.IsThinking">
+                        <option value="White">White</option>
+                        <option value="Black">Black</option>
+                    </select>
+                </label>
+                <label>
+                    <span>Strength</span>
+                    <select @bind="_selectedDifficulty" disabled="@_session.IsThinking">
+                        <option value="Easy">Quick</option>
+                        <option value="Medium">Club</option>
+                        <option value="Hard">Strong</option>
+                        <option value="VeryHard">Forge</option>
+                    </select>
+                </label>
+                <button class="primary-button" type="button" disabled="@_session.IsThinking" @onclick="StartNewGameAsync">New game</button>
+            </section>
+
+            <section class="panel-section moves-section">
+                <div class="section-heading">
+                    <h2>Moves</h2>
+                    <span>@((_session.Moves.Count + 1) / 2)</span>
+                </div>
+                @if (_session.Moves.Count == 0)
+                {
+                    <p class="empty-state">The game record will appear here.</p>
+                }
+                else
+                {
+                    <ol class="move-list">
+                        @for (int index = 0; index < _session.Moves.Count; index += 2)
+                        {
+                            <li>
+                                <span class="move-number">@(index / 2 + 1).</span>
+                                <span>@_session.Moves[index].Label</span>
+                                <span>@(index + 1 < _session.Moves.Count ? _session.Moves[index + 1].Label : "")</span>
+                            </li>
+                        }
+                    </ol>
+                }
+            </section>
+
+            <section class="panel-section engine-section">
+                <div class="section-heading">
+                    <h2>Engine room</h2>
+                    <span class="eval-score">@EvaluationLabel</span>
+                </div>
+                <div class="eval-track" aria-label="Static evaluation @EvaluationLabel">
+                    <span style="width: @EvaluationPercent%"></span>
+                </div>
+                <dl class="search-stats">
+                    <div><dt>Depth</dt><dd>@SearchDepth</dd></div>
+                    <div><dt>Nodes</dt><dd>@SearchNodes</dd></div>
+                    <div><dt>Source</dt><dd>@SearchSource</dd></div>
+                </dl>
+                <div class="pv-block">
+                    <span>Principal variation</span>
+                    <code>@PrincipalVariation</code>
+                </div>
+                <details>
+                    <summary>Evaluation detail</summary>
+                    <div class="eval-detail">
+                        @foreach (var item in EvaluationItems)
+                        {
+                            <div><span>@item.Label</span><strong>@FormatCentipawns(item.Value)</strong></div>
+                        }
+                    </div>
+                </details>
+            </section>
+
+            <footer class="panel-actions">
+                <button type="button" disabled="@(!_session.CanUndo)" @onclick="UndoTurn" title="Undo the last turn">↶ <span>Undo</span></button>
+                <button type="button" @onclick="FlipBoard" title="Flip board">⇅ <span>Flip</span></button>
+                <button type="button" @onclick="CopyFenAsync" title="Copy FEN">⧉ <span>@_copyLabel</span></button>
+            </footer>
+        </aside>
+    </section>
+
+    <section class="project-section" aria-labelledby="about-moonforge">
+        <div class="project-intro">
+            <p class="eyebrow">Open source · C# · .NET 10</p>
+            <h2 id="about-moonforge">A chess engine<br /><em>built to be understood.</em></h2>
+        </div>
+
+        <div class="project-copy">
+            <p>
+                Moonforge Chess is a handcrafted, single-threaded chess engine built around
+                bitboards, alpha-beta search, and a classical evaluation. There is no neural
+                network hidden behind the curtain: its move generation, search, and scoring
+                can all be followed from end to end.
+            </p>
+            <p>
+                ChessBin runs that same engine locally through WebAssembly. Your games never
+                leave the browser, and the Engine Room exposes Moonforge's evaluation and
+                principal variation while you play.
+            </p>
+
+            <nav class="project-links" aria-label="Moonforge project links">
+                <a class="project-link primary" href="https://github.com/3583Bytes/Moonforge-Chess" target="_blank" rel="noreferrer">
+                    <span>View source</span>
+                    <strong>GitHub ↗</strong>
+                </a>
+                <a class="project-link" href="https://github.com/3583Bytes/Moonforge-Chess#readme" target="_blank" rel="noreferrer">
+                    <span>How it works</span>
+                    <strong>Documentation ↗</strong>
+                </a>
+                <a class="project-link" href="https://github.com/3583Bytes/Moonforge-Chess/releases" target="_blank" rel="noreferrer">
+                    <span>Desktop engine</span>
+                    <strong>Releases ↗</strong>
+                </a>
+                <a class="project-link" href="https://github.com/3583Bytes/Moonforge-Chess/issues" target="_blank" rel="noreferrer">
+                    <span>Ideas and bugs</span>
+                    <strong>Issue tracker ↗</strong>
+                </a>
+            </nav>
+        </div>
+    </section>
+
+    <footer class="site-footer">
+        <span>Moonforge Chess runs locally in WebAssembly.</span>
+        <span>Open source on GitHub.</span>
+    </footer>
+</main>
+
+@code {
+    private readonly ChessGameSession _session = new();
+    private readonly ChessPieceType[] PromotionPieces =
+    [
+        ChessPieceType.Queen,
+        ChessPieceType.Rook,
+        ChessPieceType.Bishop,
+        ChessPieceType.Knight
+    ];
+    private ChessPieceColor _selectedSide = ChessPieceColor.White;
+    private Engine.Difficulty _selectedDifficulty = Engine.Difficulty.Easy;
+    private string _copyLabel = "Copy FEN";
+
+    [Inject] private IJSRuntime Js { get; set; } = null!;
+
+    private string HumanSideLabel => _session.HumanColor == ChessPieceColor.White ? "White pieces" : "Black pieces";
+    private string EngineSideLabel => _session.HumanColor == ChessPieceColor.White ? "Black pieces" : "White pieces";
+    private string StatusIcon => _session.IsThinking ? "◌" : _session.IsGameOver ? "◆" : "●";
+    private string EvaluationLabel => FormatCentipawns(_session.Evaluation.Total);
+    private double EvaluationPercent => Math.Clamp(50 + _session.Evaluation.Total / 20d, 4, 96);
+    private string SearchDepth => _session.LastSearch is null ? "—" : _session.LastSearch.Depth.ToString();
+    private string SearchNodes => _session.LastSearch is null ? "—" : FormatNodes(_session.LastSearch.TotalNodes);
+    private string SearchSource => _session.LastSearch is null ? "Waiting" : _session.LastMoveWasBook ? "Opening book" : "Search";
+    private string PrincipalVariation => string.IsNullOrWhiteSpace(_session.LastSearch?.PrincipalVariation) ? "No line searched yet." : _session.LastSearch.PrincipalVariation;
+
+    private IEnumerable<(string Label, int Value)> EvaluationItems
+    {
+        get
+        {
+            EvaluationBreakdown e = _session.Evaluation;
+            yield return ("Material", e.Material);
+            yield return ("Piece activity", e.PieceSquareTables + e.Mobility);
+            yield return ("Attack / defense", e.AttackDefense);
+            yield return ("Pawn structure", e.PawnStructure);
+            yield return ("King safety", e.KingSafety + e.Castling);
+            yield return ("Development", e.MinorPieceAdjustments + e.QueenDevelopment);
+            yield return ("Tempo / check", e.Tempo + e.Check);
+        }
+    }
+
+    private async Task StartNewGameAsync()
+    {
+        _copyLabel = "Copy FEN";
+        await _session.NewGameAsync(_selectedSide, _selectedDifficulty);
+    }
+
+    private async Task HandleSquareAsync(BoardSquare square)
+    {
+        await _session.ClickSquareAsync(square.Column, square.Row);
+    }
+
+    private async Task PromoteAsync(ChessPieceType type)
+    {
+        await _session.CompletePromotionAsync(type);
+    }
+
+    private void CancelPromotion()
+    {
+        _session.CancelPromotion();
+    }
+
+    private void UndoTurn()
+    {
+        _session.UndoTurn();
+        _copyLabel = "Copy FEN";
+    }
+
+    private void FlipBoard() => _session.FlipBoard();
+
+    private async Task CopyFenAsync()
+    {
+        await Js.InvokeVoidAsync("navigator.clipboard.writeText", _session.Fen);
+        _copyLabel = "Copied";
+    }
+
+    private bool ShowFileLabel(BoardSquare square) => _session.WhiteAtBottom ? square.Row == 7 : square.Row == 0;
+    private bool ShowRankLabel(BoardSquare square) => _session.WhiteAtBottom ? square.Column == 0 : square.Column == 7;
+
+    private static string SquareClass(BoardSquare square)
+    {
+        var classes = new List<string> { "square", square.IsDark ? "dark" : "light" };
+        if (square.IsSelected) classes.Add("selected");
+        if (square.IsLastMove) classes.Add("last-move");
+        return string.Join(' ', classes);
+    }
+
+    private static string PieceColorClass(BoardSquare square) => square.PieceColor == ChessPieceColor.White ? "white-piece" : "black-piece";
+
+    private static string SquareAriaLabel(BoardSquare square)
+    {
+        if (!square.IsOccupied) return square.IsLegalTarget ? $"{square.Coordinate}, legal destination" : $"{square.Coordinate}, empty";
+        return $"{square.Coordinate}, {square.PieceColor} {square.PieceType}{(square.IsLegalTarget ? ", legal capture" : string.Empty)}";
+    }
+
+    private static string PieceGlyph(BoardSquare square) => PieceGlyph(square.PieceType, square.PieceColor ?? ChessPieceColor.White);
+
+    private static string PieceGlyph(ChessPieceType type, ChessPieceColor color) => (type, color) switch
+    {
+        (ChessPieceType.King, ChessPieceColor.White) => "♔",
+        (ChessPieceType.Queen, ChessPieceColor.White) => "♕",
+        (ChessPieceType.Rook, ChessPieceColor.White) => "♖",
+        (ChessPieceType.Bishop, ChessPieceColor.White) => "♗",
+        (ChessPieceType.Knight, ChessPieceColor.White) => "♘",
+        (ChessPieceType.Pawn, ChessPieceColor.White) => "♙",
+        (ChessPieceType.King, ChessPieceColor.Black) => "♚",
+        (ChessPieceType.Queen, ChessPieceColor.Black) => "♛",
+        (ChessPieceType.Rook, ChessPieceColor.Black) => "♜",
+        (ChessPieceType.Bishop, ChessPieceColor.Black) => "♝",
+        (ChessPieceType.Knight, ChessPieceColor.Black) => "♞",
+        (ChessPieceType.Pawn, ChessPieceColor.Black) => "♟",
+        _ => string.Empty
+    };
+
+    private static string FormatCentipawns(int score) => score switch
+    {
+        > 0 => $"+{score / 100d:0.00}",
+        < 0 => $"{score / 100d:0.00}",
+        _ => "0.00"
+    };
+
+    private static string FormatNodes(long nodes) => nodes switch
+    {
+        >= 1_000_000 => $"{nodes / 1_000_000d:0.0}m",
+        >= 1_000 => $"{nodes / 1_000d:0.0}k",
+        _ => nodes.ToString()
+    };
+
+    public void Dispose() => _session.Dispose();
+}
