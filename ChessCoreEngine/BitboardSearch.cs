@@ -37,6 +37,15 @@ namespace ChessEngine.Engine
         private static readonly Move[,] _pvTable = new Move[MaxPly, MaxPly];
         private static readonly int[] _pvLength = new int[MaxPly];
 
+        // Search is single-threaded, so each recursive ply can safely reuse its
+        // own move lists. This removes two short-lived List allocations from
+        // every alpha-beta node and three from every quiescence node.
+        private static readonly List<Move>[] _searchMoves = CreateMoveBuffers(64);
+        private static readonly List<Move>[] _searchPseudoMoves = CreateMoveBuffers(64);
+        private static readonly List<Move>[] _quiescenceMoves = CreateMoveBuffers(32);
+        private static readonly List<Move>[] _quiescenceLegalMoves = CreateMoveBuffers(64);
+        private static readonly List<Move>[] _quiescencePseudoMoves = CreateMoveBuffers(64);
+
         // Time-abort plumbing (same approach as the legacy search).
         private const int AbortCheckInterval = 2048;
         private static long _deadlineTicks;
@@ -115,8 +124,9 @@ namespace ChessEngine.Engine
             score = 0;
             depthReached = 0;
 
-            var rootMoves = new List<Move>(64);
-            MoveGen.GenerateLegal(root, rootMoves);
+            List<Move> rootMoves = GetMoveBuffer(_searchMoves, 0, 64);
+            List<Move> rootPseudoMoves = GetMoveBuffer(_searchPseudoMoves, 0, 64);
+            MoveGen.GenerateLegal(root, rootMoves, rootPseudoMoves);
             if (rootMoves.Count == 0)
             {
                 score = MoveGen.InCheck(root, root.SideToMove) ? -Mate : 0;
@@ -233,8 +243,9 @@ namespace ChessEngine.Engine
                 if (nullScore >= beta) return beta;
             }
 
-            var moves = new List<Move>(64);
-            MoveGen.GenerateLegal(p, moves);
+            List<Move> moves = GetMoveBuffer(_searchMoves, ply, 64);
+            List<Move> pseudoMoves = GetMoveBuffer(_searchPseudoMoves, ply, 64);
+            MoveGen.GenerateLegal(p, moves, pseudoMoves);
 
             if (moves.Count == 0)
                 return inCheck ? -(Mate - ply) : 0; // checkmate or stalemate
@@ -415,8 +426,10 @@ namespace ChessEngine.Engine
             if (standPat >= beta) return beta;
             if (standPat > alpha) alpha = standPat;
 
-            var moves = new List<Move>(32);
-            GenerateQMoves(p, qsPly, moves);
+            List<Move> moves = GetMoveBuffer(_quiescenceMoves, qsPly, 32);
+            List<Move> legalMoves = GetMoveBuffer(_quiescenceLegalMoves, qsPly, 64);
+            List<Move> pseudoMoves = GetMoveBuffer(_quiescencePseudoMoves, qsPly, 64);
+            GenerateQMoves(p, qsPly, moves, legalMoves, pseudoMoves);
             OrderMoves(p, moves, default, 0);
 
             foreach (Move m in moves)
@@ -443,14 +456,14 @@ namespace ChessEngine.Engine
         // Quiescence move set: captures (incl. ep and capture-promotions) plus, at
         // the first qsearch ply, non-capture knight moves that give check (catches
         // knight-fork tactics, as the legacy search does).
-        private static void GenerateQMoves(Position p, int qsPly, List<Move> outMoves)
+        private static void GenerateQMoves(Position p, int qsPly, List<Move> outMoves,
+                                           List<Move> legalMoves, List<Move> pseudoMoves)
         {
-            var all = new List<Move>(64);
-            MoveGen.GenerateLegal(p, all);
+            MoveGen.GenerateLegal(p, legalMoves, pseudoMoves);
             int enemyKing = p.KingSq[p.SideToMove ^ 1];
             int knightBase = p.SideToMove * 6 + (int)ChessPieceType.Knight;
 
-            foreach (Move m in all)
+            foreach (Move m in legalMoves)
             {
                 bool isCapture = m.Flag == MoveFlag.EnPassant || p.PieceOn[m.To] != Position.EMPTY;
                 if (isCapture) { outMoves.Add(m); continue; }
@@ -461,6 +474,24 @@ namespace ChessEngine.Engine
                     outMoves.Add(m); // non-capture knight check
                 }
             }
+        }
+
+        private static List<Move>[] CreateMoveBuffers(int capacity)
+        {
+            var buffers = new List<Move>[MaxPly];
+            for (int ply = 0; ply < buffers.Length; ply++)
+                buffers[ply] = new List<Move>(capacity);
+            return buffers;
+        }
+
+        private static List<Move> GetMoveBuffer(List<Move>[] buffers, int ply, int capacity)
+        {
+            if ((uint)ply >= (uint)buffers.Length)
+                return new List<Move>(capacity); // pathological line beyond the supported PV depth
+
+            List<Move> buffer = buffers[ply];
+            buffer.Clear();
+            return buffer;
         }
 
         #region Move ordering

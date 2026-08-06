@@ -230,6 +230,27 @@ removing `new short[8]` × 2 from the hot path.
 Bench measures node count and raw speed, **not playing strength**: confirm with
 a head-to-head Cute Chess match before treating the change as a strength gain.
 
+## Reusable search move buffers (macOS / arm64, 2026-08-05)
+
+Alpha-beta and quiescence now reuse separate move and pseudo-move lists for each
+recursive ply. `MoveGen.GenerateLegal` accepts the caller's pseudo-legal scratch
+buffer, removing the temporary list it previously created at every node.
+
+Release benchmark with repeated `bench` commands in one engine process, excluding
+the first JIT/static-initialization run:
+
+| Metric | Per-node lists | Per-ply buffers | Change |
+|---|---:|---:|---:|
+| Total nodes | 30,049 | 30,049 | unchanged |
+| Allocated memory | 30,473 KB | 17,786 KB | **-41.6%** |
+| Median time | ~30 ms | ~30 ms | no measurable change |
+
+The deterministic tree and selected moves are unchanged. This benchmark is too
+short to turn the allocation reduction into a stable NPS improvement, so no raw
+speedup is claimed. The benefit is lower GC pressure during longer searches.
+The `bench` total line now includes `allocated ...KB` so future allocation
+regressions are visible alongside nodes, time, and NPS.
+
 ## How to interpret comparisons
 
 After a change, re-run the procedure above and compare to the baseline.

@@ -108,6 +108,14 @@ namespace ChessEngine.Engine
         internal static void GenerateLegal(Position p, List<Move> moves)
         {
             var pseudo = new List<Move>(64);
+            GenerateLegal(p, moves, pseudo);
+        }
+
+        // Search supplies a per-ply scratch list so legal move generation does
+        // not allocate a temporary pseudo-legal list at every node.
+        internal static void GenerateLegal(Position p, List<Move> moves, List<Move> pseudo)
+        {
+            pseudo.Clear();
             GeneratePseudoLegal(p, pseudo);
 
             int us = p.SideToMove;

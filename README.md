@@ -39,6 +39,7 @@ ballpark rather than a published rating. Strength-affecting changes are gated wi
 - Quiescence search with stand-pat and SEE pruning — captures with a negative static-exchange value are skipped (cheaper qsearch ⇒ more depth); searches captures (incl. en passant and capture-promotions)
 - Quiescence also considers non-capture *knight* checks at its first ply — catches the knight-fork class of horizon tactic
 - Mate detection with depth-adjusted scores (shorter mates score higher)
+- Reusable per-ply move buffers in alpha-beta and quiescence avoid allocating temporary move lists at every searched node
 
 **Evaluation** (`BitboardEvalNative.cs`)
 
@@ -225,7 +226,7 @@ When running the engine by hand (no GUI attached), a few non-standard commands a
 | `fen` | Print just the FEN. |
 | `eval` | Print the static evaluation from both White's and side-to-move's perspectives. |
 | `eval detail` | Break the static evaluation into material, piece-square tables, mobility, king safety, pawn structure, and the other scoring terms. Values are centipawns from White's perspective and add up to the reported total. |
-| `bench` | Run a fixed search benchmark over six well-known test positions at depth 5 and report total nodes / NPS / time. Use this to spot performance regressions. |
+| `bench` | Run a fixed search benchmark over six well-known test positions at depth 5 and report total nodes, NPS, time, and allocated memory. Use this to spot performance regressions. |
 | `flip` | Mirror the board top-to-bottom and swap every piece's color. Mostly useful for verifying evaluation symmetry. |
 | `compiler` | Print the .NET runtime version, framework, OS, and process architecture. |
 | `<move>` | A bare move like `e2e4` or `e7e8q` is applied to the engine's current board state without needing a full `position` command. This is a Moonforge Chess convenience and is not part of standard UCI; no GUI sends bare moves, so it only fires at a terminal. |

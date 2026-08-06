@@ -456,6 +456,7 @@ namespace ChessCore
             const byte depth = 5;
             long totalNodes = 0;
             var totalSw = Stopwatch.StartNew();
+            long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
 
             Send("info string bench depth=" + depth + ", positions=" + BenchPositions.Length);
 
@@ -491,9 +492,10 @@ namespace ChessCore
             totalSw.Stop();
             long totalNps = totalSw.ElapsedMilliseconds > 0
                 ? (totalNodes * 1000L) / totalSw.ElapsedMilliseconds : 0;
+            long allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
             Send(string.Format(CultureInfo.InvariantCulture,
-                "info string =============== total nodes {0} time {1}ms nps {2}",
-                totalNodes, totalSw.ElapsedMilliseconds, totalNps));
+                "info string =============== total nodes {0} time {1}ms nps {2} allocated {3}KB",
+                totalNodes, totalSw.ElapsedMilliseconds, totalNps, allocatedBytes / 1024));
         }
 
         // Stockfish-style flip: mirror the board top-to-bottom and swap every piece's color.
