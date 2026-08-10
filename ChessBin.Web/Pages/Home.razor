@@ -1,10 +1,11 @@
 @page "/"
 @using ChessEngine.Engine
 @implements IDisposable
+@using System.Text.Json
 
 <PageTitle>ChessBin · Play Moonforge Chess</PageTitle>
 
-<main class="site-shell">
+<main class="site-shell @(_lightBoard ? "light-theme" : "")">
     <header class="masthead">
         <a class="brand" href="" aria-label="ChessBin home">
             <span class="brand-mark" aria-hidden="true">☾</span>
@@ -29,6 +30,7 @@
                     <strong>Moonforge</strong>
                     <span>@EngineSideLabel</span>
                 </div>
+                <time class="chess-clock" datetime="@ClockDuration(EngineMilliseconds)">@ClockLabel(EngineMilliseconds)</time>
                 @if (_session.IsThinking)
                 {
                     <span class="thinking"><i></i><i></i><i></i></span>
@@ -45,11 +47,11 @@
                                 aria-label="@SquareAriaLabel(square)"
                                 disabled="@(!_session.IsHumanTurn || _session.HasPendingPromotion)"
                                 @onclick="() => HandleSquareAsync(square)">
-                            @if (ShowFileLabel(square))
+                            @if (_showCoordinates && ShowFileLabel(square))
                             {
                                 <span class="coordinate file">@((char)('a' + square.Column))</span>
                             }
-                            @if (ShowRankLabel(square))
+                            @if (_showCoordinates && ShowRankLabel(square))
                             {
                                 <span class="coordinate rank">@(8 - square.Row)</span>
                             }
@@ -86,6 +88,7 @@
                     <strong>You</strong>
                     <span>@HumanSideLabel</span>
                 </div>
+                <time class="chess-clock" datetime="@ClockDuration(HumanMilliseconds)">@ClockLabel(HumanMilliseconds)</time>
             </div>
 
             <div class="status-line" aria-live="polite">
@@ -103,18 +106,27 @@
             <section class="panel-section setup-section">
                 <label>
                     <span>Play as</span>
-                    <select @bind="_selectedSide" disabled="@_session.IsThinking">
+                    <select @bind="_selectedSide" @bind:after="SaveSettingsAsync" disabled="@_session.IsThinking">
                         <option value="White">White</option>
                         <option value="Black">Black</option>
                     </select>
                 </label>
                 <label>
                     <span>Strength</span>
-                    <select @bind="_selectedDifficulty" disabled="@_session.IsThinking">
+                    <select @bind="_selectedDifficulty" @bind:after="SaveSettingsAsync" disabled="@_session.IsThinking">
                         <option value="Easy">Quick</option>
                         <option value="Medium">Club</option>
                         <option value="Hard">Strong</option>
                         <option value="VeryHard">Forge</option>
+                    </select>
+                </label>
+                <label>
+                    <span>Time control</span>
+                    <select @bind="_selectedTimeControl" @bind:after="SaveSettingsAsync" disabled="@_session.IsThinking">
+                        <option value="Unlimited">Unlimited</option>
+                        <option value="Bullet">1 + 0</option>
+                        <option value="Blitz">3 + 2</option>
+                        <option value="Rapid">10 + 0</option>
                     </select>
                 </label>
                 <button class="primary-button" type="button" disabled="@_session.IsThinking" @onclick="StartNewGameAsync">New game</button>
@@ -123,7 +135,7 @@
             <section class="panel-section moves-section">
                 <div class="section-heading">
                     <h2>Moves</h2>
-                    <span>@((_session.Moves.Count + 1) / 2)</span>
+                <span>@_session.CurrentPly / @_session.Moves.Count</span>
                 </div>
                 @if (_session.Moves.Count == 0)
                 {
@@ -136,12 +148,21 @@
                         {
                             <li>
                                 <span class="move-number">@(index / 2 + 1).</span>
-                                <span>@_session.Moves[index].Label</span>
-                                <span>@(index + 1 < _session.Moves.Count ? _session.Moves[index + 1].Label : "")</span>
+                                <button class="move-button @MoveClass(index)" type="button" @onclick="() => _session.NavigateToPly(index + 1)">@_session.Moves[index].Label</button>
+                                @if (index + 1 < _session.Moves.Count)
+                                {
+                                    <button class="move-button @MoveClass(index + 1)" type="button" @onclick="() => _session.NavigateToPly(index + 2)">@_session.Moves[index + 1].Label</button>
+                                }
                             </li>
                         }
                     </ol>
                 }
+                <div class="move-navigation" aria-label="Move navigation">
+                    <button type="button" disabled="@(!_session.CanStepBack)" @onclick="() => _session.NavigateToPly(0)" title="First move">|◀</button>
+                    <button type="button" disabled="@(!_session.CanStepBack)" @onclick="_session.StepBack" title="Previous move">◀</button>
+                    <button type="button" disabled="@(!_session.CanStepForward)" @onclick="_session.StepForward" title="Next move">▶</button>
+                    <button type="button" disabled="@(!_session.CanStepForward)" @onclick="() => _session.NavigateToPly(_session.Moves.Count)" title="Last move">▶|</button>
+                </div>
             </section>
 
             <section class="panel-section engine-section">
@@ -155,6 +176,7 @@
                 <dl class="search-stats">
                     <div><dt>Depth</dt><dd>@SearchDepth</dd></div>
                     <div><dt>Nodes</dt><dd>@SearchNodes</dd></div>
+                    <div><dt>Speed</dt><dd>@SearchSpeed</dd></div>
                     <div><dt>Source</dt><dd>@SearchSource</dd></div>
                 </dl>
                 <div class="pv-block">
@@ -170,6 +192,27 @@
                         }
                     </div>
                 </details>
+            </section>
+
+            <section class="panel-section position-section">
+                <div class="section-heading"><h2>Position</h2><span>FEN / PGN</span></div>
+                <input class="fen-input" @bind="_fenInput" aria-label="FEN position" placeholder="Paste a FEN position" />
+                @if (!string.IsNullOrWhiteSpace(_positionMessage))
+                {
+                    <p class="position-message">@_positionMessage</p>
+                }
+                <div class="position-actions">
+                    <button type="button" @onclick="LoadFen">Load FEN</button>
+                    <button type="button" @onclick="CopyPgnAsync">Copy PGN</button>
+                    <button type="button" @onclick="SharePositionAsync">Share</button>
+                </div>
+            </section>
+
+            <section class="panel-section settings-section">
+                <div class="section-heading"><h2>Board settings</h2><span>Saved locally</span></div>
+                <label class="toggle"><input type="checkbox" @bind="_showCoordinates" @bind:after="SaveSettingsAsync" /> Coordinates</label>
+                <label class="toggle"><input type="checkbox" @bind="_soundEnabled" @bind:after="SaveSettingsAsync" /> Move sounds</label>
+                <label class="toggle"><input type="checkbox" @bind="_lightBoard" @bind:after="SaveSettingsAsync" /> Light board</label>
             </section>
 
             <footer class="panel-actions">
@@ -198,6 +241,7 @@
                 leave the browser, and the Engine Room exposes Moonforge's evaluation and
                 principal variation while you play.
             </p>
+            <p class="how-to-play"><strong>How to play:</strong> select a piece and a highlighted square. Use the move controls to review a game, or share a FEN position with another player. All analysis runs on your device.</p>
 
             <nav class="project-links" aria-label="Moonforge project links">
                 <a class="project-link primary" href="https://github.com/3583Bytes/Moonforge-Chess" target="_blank" rel="noreferrer">
@@ -237,7 +281,15 @@
     ];
     private ChessPieceColor _selectedSide = ChessPieceColor.White;
     private Engine.Difficulty _selectedDifficulty = Engine.Difficulty.Easy;
+    private string _selectedTimeControl = "Unlimited";
     private string _copyLabel = "Copy FEN";
+    private string _fenInput = string.Empty;
+    private string _positionMessage = string.Empty;
+    private bool _showCoordinates = true;
+    private bool _soundEnabled;
+    private bool _lightBoard;
+    private System.Threading.Timer? _clockTimer;
+    private bool _initialized;
 
     [Inject] private IJSRuntime Js { get; set; } = null!;
 
@@ -248,8 +300,11 @@
     private double EvaluationPercent => Math.Clamp(50 + _session.Evaluation.Total / 20d, 4, 96);
     private string SearchDepth => _session.LastSearch is null ? "—" : _session.LastSearch.Depth.ToString();
     private string SearchNodes => _session.LastSearch is null ? "—" : FormatNodes(_session.LastSearch.TotalNodes);
-    private string SearchSource => _session.LastSearch is null ? "Waiting" : _session.LastMoveWasBook ? "Opening book" : "Search";
+    private string SearchSpeed => _session.SearchNodesPerSecond == 0 ? "—" : $"{FormatNodes(_session.SearchNodesPerSecond)}/s";
+    private string SearchSource => _session.LastSearch is null ? "Waiting" : _session.LastMoveWasBook ? "Opening book" : _session.IsThinking ? "Live" : "Search";
     private string PrincipalVariation => string.IsNullOrWhiteSpace(_session.LastSearch?.PrincipalVariation) ? "No line searched yet." : _session.LastSearch.PrincipalVariation;
+    private long HumanMilliseconds => _session.HumanColor == ChessPieceColor.White ? _session.WhiteMilliseconds : _session.BlackMilliseconds;
+    private long EngineMilliseconds => _session.HumanColor == ChessPieceColor.White ? _session.BlackMilliseconds : _session.WhiteMilliseconds;
 
     private IEnumerable<(string Label, int Value)> EvaluationItems
     {
@@ -269,17 +324,25 @@
     private async Task StartNewGameAsync()
     {
         _copyLabel = "Copy FEN";
-        await _session.NewGameAsync(_selectedSide, _selectedDifficulty);
+        _positionMessage = string.Empty;
+        await SaveSettingsAsync();
+        await _session.NewGameAsync(_selectedSide, _selectedDifficulty, GetTimeControl());
     }
 
     private async Task HandleSquareAsync(BoardSquare square)
     {
+        int moveCount = _session.Moves.Count;
         await _session.ClickSquareAsync(square.Column, square.Row);
+        if (_soundEnabled && _session.Moves.Count > moveCount)
+            await Js.InvokeVoidAsync("chessBin.playMoveSound");
     }
 
     private async Task PromoteAsync(ChessPieceType type)
     {
+        int moveCount = _session.Moves.Count;
         await _session.CompletePromotionAsync(type);
+        if (_soundEnabled && _session.Moves.Count > moveCount)
+            await Js.InvokeVoidAsync("chessBin.playMoveSound");
     }
 
     private void CancelPromotion()
@@ -300,6 +363,89 @@
         await Js.InvokeVoidAsync("navigator.clipboard.writeText", _session.Fen);
         _copyLabel = "Copied";
     }
+
+    private async Task CopyPgnAsync()
+    {
+        await Js.InvokeVoidAsync("chessBin.copyText", _session.Pgn);
+        _positionMessage = "PGN copied to the clipboard.";
+    }
+
+    private async Task SharePositionAsync()
+    {
+        await Js.InvokeVoidAsync("chessBin.shareFen", _session.Fen);
+        _positionMessage = "Share link copied to the clipboard.";
+    }
+
+    private void LoadFen()
+    {
+        try
+        {
+            _session.LoadPosition(_fenInput.Trim(), _selectedSide, _selectedDifficulty);
+            _positionMessage = "Position loaded.";
+        }
+        catch (FormatException)
+        {
+            _positionMessage = "That FEN is not a valid chess position.";
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        _session.StateChanged += OnSessionChanged;
+        _clockTimer = new System.Threading.Timer(_ =>
+        {
+            _session.TickClock();
+            _ = InvokeAsync(StateHasChanged);
+        }, null, 250, 250);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _initialized) return;
+        _initialized = true;
+        string? json = await Js.InvokeAsync<string?>("chessBin.getSettings");
+        if (!string.IsNullOrWhiteSpace(json))
+        {
+            var settings = JsonSerializer.Deserialize<ChessBinSettings>(json);
+            if (settings is not null)
+            {
+                _selectedSide = settings.Side;
+                _selectedDifficulty = settings.Difficulty;
+                _selectedTimeControl = settings.TimeControl;
+                _showCoordinates = settings.ShowCoordinates;
+                _soundEnabled = settings.SoundEnabled;
+                _lightBoard = settings.LightBoard;
+            }
+        }
+
+        string? fen = await Js.InvokeAsync<string?>("chessBin.getFenFromUrl");
+        if (!string.IsNullOrWhiteSpace(fen))
+        {
+            _fenInput = fen;
+            LoadFen();
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SaveSettingsAsync()
+    {
+        var settings = new ChessBinSettings(_selectedSide, _selectedDifficulty, _selectedTimeControl, _showCoordinates, _soundEnabled, _lightBoard);
+        await Js.InvokeVoidAsync("chessBin.saveSettings", JsonSerializer.Serialize(settings));
+    }
+
+    private void OnSessionChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private TimeControl GetTimeControl() => _selectedTimeControl switch
+    {
+        "Bullet" => TimeControl.Bullet,
+        "Blitz" => TimeControl.Blitz,
+        "Rapid" => TimeControl.Rapid,
+        _ => TimeControl.Unlimited
+    };
+
+    private string MoveClass(int moveIndex) => _session.CurrentPly == moveIndex + 1 ? "current" : string.Empty;
+    private static string ClockLabel(long milliseconds) => milliseconds <= 0 ? "∞" : TimeSpan.FromMilliseconds(milliseconds).ToString(@"m\:ss");
+    private static string ClockDuration(long milliseconds) => milliseconds <= 0 ? "PT0S" : $"PT{Math.Ceiling(milliseconds / 1000d)}S";
 
     private bool ShowFileLabel(BoardSquare square) => _session.WhiteAtBottom ? square.Row == 7 : square.Row == 0;
     private bool ShowRankLabel(BoardSquare square) => _session.WhiteAtBottom ? square.Column == 0 : square.Column == 7;
@@ -353,5 +499,18 @@
         _ => nodes.ToString()
     };
 
-    public void Dispose() => _session.Dispose();
+    public void Dispose()
+    {
+        _clockTimer?.Dispose();
+        _session.StateChanged -= OnSessionChanged;
+        _session.Dispose();
+    }
+
+    private sealed record ChessBinSettings(
+        ChessPieceColor Side,
+        Engine.Difficulty Difficulty,
+        string TimeControl,
+        bool ShowCoordinates,
+        bool SoundEnabled,
+        bool LightBoard);
 }

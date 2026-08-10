@@ -120,4 +120,60 @@ public sealed class ChessGameSessionTests
             Assert.That(_session.IsHumanTurn, Is.True);
         });
     }
+
+    [Test]
+    public async Task MoveNavigation_RebuildsTheSelectedHistoricalPosition()
+    {
+        await _session.ClickSquareAsync(4, 6); // e2
+        await _session.ClickSquareAsync(4, 4); // e4 + engine reply
+        string liveFen = _session.Fen;
+
+        _session.StepBack();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_session.Moves, Has.Count.EqualTo(2), "History is retained while reviewing");
+            Assert.That(_session.CurrentPly, Is.EqualTo(1));
+            Assert.That(_session.IsViewingHistory, Is.True);
+            Assert.That(_session.Fen, Is.Not.EqualTo(liveFen));
+            Assert.That(_session.GetDisplaySquares().Where(square => square.IsLastMove).Select(square => square.Coordinate),
+                Is.EquivalentTo(new[] { "e2", "e4" }));
+        });
+
+        _session.StepForward();
+        Assert.Multiple(() =>
+        {
+            Assert.That(_session.CurrentPly, Is.EqualTo(2));
+            Assert.That(_session.IsViewingHistory, Is.False);
+            Assert.That(_session.Fen, Is.EqualTo(liveFen));
+        });
+    }
+
+    [Test]
+    public async Task Pgn_ExportsPlayedMovesAndOngoingResult()
+    {
+        await _session.ClickSquareAsync(4, 6); // e2
+        await _session.ClickSquareAsync(4, 4); // e4 + engine reply
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_session.Pgn, Does.Contain("[Event \"ChessBin game\"]"));
+            Assert.That(_session.Pgn, Does.Contain("[Result \"*\"]"));
+            Assert.That(_session.Pgn, Does.Contain("1. e4"));
+            Assert.That(_session.Pgn.TrimEnd(), Does.EndWith("*"));
+        });
+    }
+
+    [Test]
+    public async Task NewGame_ConfiguresTheRequestedClock()
+    {
+        await _session.NewGameAsync(ChessPieceColor.White, Engine.Difficulty.Easy, TimeControl.Blitz);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_session.CurrentTimeControl, Is.EqualTo(TimeControl.Blitz));
+            Assert.That(_session.WhiteMilliseconds, Is.GreaterThan(0));
+            Assert.That(_session.BlackMilliseconds, Is.GreaterThan(0));
+        });
+    }
 }
