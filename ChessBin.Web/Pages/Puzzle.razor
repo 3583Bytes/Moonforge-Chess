@@ -1,0 +1,422 @@
+@page "/puzzle"
+@using ChessEngine.Engine
+@using System.Text.Json
+@implements IDisposable
+
+<PageTitle>Daily puzzle · ChessBin</PageTitle>
+
+<main class="site-shell">
+    <SiteHeader />
+
+    <section class="hero puzzle-hero">
+        <div>
+            <p class="eyebrow">Daily puzzle · @Today.ToString("d MMMM yyyy")</p>
+            <h1>@HeroHeading</h1>
+        </div>
+        <p class="intro">
+            One position a day, the same for everyone, straight from real games. No account —
+            your streak lives in this browser.
+        </p>
+    </section>
+
+    @if (_loadError is not null)
+    {
+        <section class="puzzle-error" role="alert">
+            <strong>Today's puzzle didn't load.</strong>
+            <p>@_loadError</p>
+            <button class="primary-button" type="button" @onclick="LoadAsync">Try again</button>
+        </section>
+    }
+    else if (!_session.IsLoaded)
+    {
+        <section class="puzzle-loading" aria-live="polite">Loading today's position…</section>
+    }
+    else
+    {
+        <section class="game-layout" aria-label="Daily puzzle">
+            <div class="board-column">
+                <div class="player-strip opponent">
+                    <div class="avatar moonforge-avatar" aria-hidden="true">☾</div>
+                    <div>
+                        <strong>@OpponentLabel</strong>
+                        <span>Just played @_session.Puzzle!.LastMove</span>
+                    </div>
+                    <span class="rating-chip" title="Lichess puzzle rating">@_session.Puzzle!.Rating</span>
+                </div>
+
+                <div class="board-wrap">
+                    <div class="chessboard" role="grid" aria-label="Puzzle position">
+                        @foreach (BoardSquare square in _session.GetDisplaySquares())
+                        {
+                            <button class="@SquareClass(square)"
+                                    type="button"
+                                    role="gridcell"
+                                    aria-label="@SquareAriaLabel(square)"
+                                    disabled="@(!_session.IsSolverTurn)"
+                                    @onclick="() => _session.ClickSquareAsync(square.Column, square.Row)">
+                                @if (ShowFileLabel(square))
+                                {
+                                    <span class="coordinate file">@((char)('a' + square.Column))</span>
+                                }
+                                @if (ShowRankLabel(square))
+                                {
+                                    <span class="coordinate rank">@(8 - square.Row)</span>
+                                }
+                                @if (square.IsLegalTarget)
+                                {
+                                    <span class="move-target @(square.IsOccupied ? "capture" : "")" aria-hidden="true"></span>
+                                }
+                                @if (square.IsOccupied)
+                                {
+                                    <span class="piece @PieceColorClass(square)" aria-hidden="true">@PieceGlyph(square)</span>
+                                }
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                <div class="player-strip">
+                    <div class="avatar human-avatar" aria-hidden="true">You</div>
+                    <div>
+                        <strong>You</strong>
+                        <span>@(_session.SolverColor == ChessPieceColor.White ? "White" : "Black") to play</span>
+                    </div>
+                    <div class="progress-pips" role="img" aria-label="@ProgressLabel">
+                        @for (int i = 0; i < _session.SolverMovesTotal; i++)
+                        {
+                            <span class="pip @PipClass(i)"></span>
+                        }
+                    </div>
+                </div>
+
+                <p class="status-line" aria-live="polite">
+                    <span class="status-icon">@(_session.IsComplete ? "◆" : "●")</span> @_session.Status
+                </p>
+            </div>
+
+            <aside class="control-panel puzzle-panel">
+                <div class="panel-tabs">
+                    <button type="button">Today</button>
+                    <span>#@DailyIndex · @_session.Puzzle!.Id</span>
+                </div>
+
+                <section class="panel-section">
+                    <div class="section-heading">
+                        <h2>The task</h2>
+                        <span>@_session.SolverMovesTotal move@(_session.SolverMovesTotal == 1 ? "" : "s")</span>
+                    </div>
+                    <dl class="puzzle-facts">
+                        <div><dt>Found</dt><dd>@_session.SolverMovesMade / @_session.SolverMovesTotal</dd></div>
+                        <div><dt>Wrong tries</dt><dd>@_session.Mistakes</dd></div>
+                        <div><dt>Rating</dt><dd>@_session.Puzzle!.Rating</dd></div>
+                        <div><dt>Hint</dt><dd>@(_session.HintUsed ? "Used" : "—")</dd></div>
+                    </dl>
+                    <div class="puzzle-themes">
+                        @foreach (string theme in _session.Puzzle!.Themes.Take(4))
+                        {
+                            <span class="theme-tag">@Humanise(theme)</span>
+                        }
+                    </div>
+                </section>
+
+                <section class="panel-section">
+                    <div class="section-heading">
+                        <h2>Your streak</h2>
+                        <span>Saved locally</span>
+                    </div>
+                    <dl class="puzzle-facts">
+                        <div><dt>Current</dt><dd>@_progress.Streak</dd></div>
+                        <div><dt>Best</dt><dd>@_progress.Best</dd></div>
+                        <div><dt>Solved</dt><dd>@_progress.TotalSolved</dd></div>
+                    </dl>
+                    @if (_alreadySolvedToday)
+                    {
+                        <p class="position-message">You already solved today's puzzle — replaying won't change your streak.</p>
+                    }
+                </section>
+
+                @if (_session.IsComplete)
+                {
+                    <section class="panel-section">
+                        <div class="section-heading">
+                            <h2>What changed</h2>
+                            <span>Moonforge's read</span>
+                        </div>
+                        @if (_session.EndedInMate)
+                        {
+                            <p class="position-message">Checkmate — the line ends the game, so there is nothing left to score.</p>
+                        }
+                        else
+                        {
+                            <p class="eval-swing">
+                                <strong class="@(_session.EvaluationSwing >= 0 ? "swing-up" : "swing-down")">@FormatSwing(_session.EvaluationSwing)</strong>
+                                <span>swing in your favour across the line</span>
+                            </p>
+                            <div class="eval-detail">
+                                @foreach ((string label, int delta) in EvaluationDeltas)
+                                {
+                                    <div><span>@label</span><strong>@FormatSwing(delta)</strong></div>
+                                }
+                            </div>
+                        }
+                        @if (_session.Line.Count > 0)
+                        {
+                            <div class="pv-block">
+                                <span>The line</span>
+                                <code>@string.Join(" ", _session.Line)</code>
+                            </div>
+                        }
+                        <a class="puzzle-source" href="@_session.Puzzle!.Url" target="_blank" rel="noreferrer">See the game it came from ↗</a>
+                    </section>
+                }
+
+                <footer class="panel-actions">
+                    <button type="button" disabled="@(!_session.IsSolverTurn)" @onclick="_session.ShowHint" title="Highlight the piece to move">
+                        ◎ <span>Hint</span>
+                    </button>
+                    <button type="button" disabled="@_session.IsComplete" @onclick="_session.RevealAsync" title="Give up and see the solution">
+                        ⚑ <span>Give up</span>
+                    </button>
+                    <button type="button" disabled="@(!_session.IsComplete)" @onclick="ShareAsync" title="Copy a spoiler-free result">
+                        ⧉ <span>@_shareLabel</span>
+                    </button>
+                </footer>
+            </aside>
+        </section>
+    }
+
+    <footer class="site-footer">
+        <span>Puzzles from the Lichess database, released under CC0.</span>
+        <span>Solved and scored on your device.</span>
+    </footer>
+</main>
+
+@code {
+    private readonly PuzzleSession _session = new();
+    private PuzzleProgress _progress = PuzzleProgress.Empty;
+    private string _shareLabel = "Share";
+    private string? _loadError;
+    private bool _alreadySolvedToday;
+    private bool _countedToday;
+    private int DailyIndex;
+
+    [Inject] private HttpClient Http { get; set; } = null!;
+    [Inject] private IJSRuntime Js { get; set; } = null!;
+
+    private static DateOnly Today => DateOnly.FromDateTime(DateTime.UtcNow);
+
+    private string HeroHeading => _session.Outcome switch
+    {
+        PuzzleOutcome.Solved => "Solved.",
+        PuzzleOutcome.Revealed => "Next time.",
+        _ => "Find the line.",
+    };
+
+    private string OpponentLabel => _session.SolverColor == ChessPieceColor.White ? "Black" : "White";
+
+    private string ProgressLabel => $"{_session.SolverMovesMade} of {_session.SolverMovesTotal} moves found";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _session.StateChanged += OnSessionChanged;
+        await LoadProgressAsync();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loadError = null;
+        try
+        {
+            var manifest = PuzzleData.ParseManifest(await Http.GetStringAsync(PuzzleData.ManifestPath));
+            DailyIndex = PuzzleData.IndexForDate(Today, manifest.Count);
+
+            int shard = PuzzleData.ShardIndexFor(DailyIndex, manifest.ShardSize);
+            int offset = PuzzleData.OffsetWithinShard(DailyIndex, manifest.ShardSize);
+
+            var puzzles = PuzzleData.ParseShard(await Http.GetStringAsync(PuzzleData.ShardPath(shard)));
+            if (offset >= puzzles.Length)
+                throw new InvalidDataException($"shard {shard} holds {puzzles.Length} puzzles, needed index {offset}");
+
+            _session.Load(puzzles[offset]);
+        }
+        catch (Exception ex)
+        {
+            _loadError = $"{ex.Message} You can retry, or come back in a moment.";
+        }
+
+        StateHasChanged();
+    }
+
+    private async void OnSessionChanged()
+    {
+        // A solve is worth recording exactly once, even though the event fires on every move.
+        if (_session.Outcome == PuzzleOutcome.Solved && !_countedToday)
+        {
+            _countedToday = true;
+            await RecordSolveAsync();
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadProgressAsync()
+    {
+        try
+        {
+            string? stored = await Js.InvokeAsync<string?>("chessBin.getPuzzleProgress");
+            if (!string.IsNullOrWhiteSpace(stored))
+                _progress = JsonSerializer.Deserialize<PuzzleProgress>(stored) ?? PuzzleProgress.Empty;
+        }
+        catch (Exception)
+        {
+            // A corrupt or unreadable entry shouldn't stop someone solving today's puzzle.
+            _progress = PuzzleProgress.Empty;
+        }
+
+        _alreadySolvedToday = _progress.LastSolved == Today.ToString("yyyy-MM-dd");
+    }
+
+    private async Task RecordSolveAsync()
+    {
+        string today = Today.ToString("yyyy-MM-dd");
+        if (_progress.LastSolved == today)
+            return;                                  // replaying a solved day changes nothing
+
+        // Solving on consecutive days extends the streak; any gap restarts it at one.
+        bool consecutive = _progress.LastSolved == Today.AddDays(-1).ToString("yyyy-MM-dd");
+        int streak = consecutive ? _progress.Streak + 1 : 1;
+
+        _progress = new PuzzleProgress(today, streak, Math.Max(_progress.Best, streak), _progress.TotalSolved + 1);
+
+        try
+        {
+            await Js.InvokeVoidAsync("chessBin.savePuzzleProgress", JsonSerializer.Serialize(_progress));
+        }
+        catch (Exception)
+        {
+            // Private-mode browsers can refuse storage. The solve still stands for this session.
+        }
+    }
+
+    private async Task ShareAsync()
+    {
+        await Js.InvokeVoidAsync("chessBin.copyText", BuildShareText());
+        _shareLabel = "Copied";
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// A result anyone can post without spoiling the puzzle: no squares, no moves, just the
+    /// shape of the solve.
+    /// </summary>
+    private string BuildShareText()
+    {
+        string squares = _session.Outcome == PuzzleOutcome.Revealed
+            ? string.Concat(Enumerable.Repeat("⬛", _session.SolverMovesTotal))
+            : string.Concat(Enumerable.Repeat(_session.IsClean ? "🟩" : "🟨", _session.SolverMovesTotal));
+
+        string verdict = _session.Outcome switch
+        {
+            PuzzleOutcome.Revealed => "gave up",
+            _ when _session.IsClean => "first try",
+            _ when _session.HintUsed && _session.Mistakes == 0 => "with a hint",
+            _ => $"after {_session.Mistakes + 1} tries",
+        };
+
+        return $"ChessBin daily #{DailyIndex}\n{squares} {verdict}\nhttps://chessbin.com/puzzle";
+    }
+
+    private IEnumerable<(string Label, int Delta)> EvaluationDeltas
+    {
+        get
+        {
+            EvaluationBreakdown a = _session.StartEvaluation;
+            EvaluationBreakdown b = _session.Evaluation;
+            int sign = _session.SolverColor == ChessPieceColor.White ? 1 : -1;
+
+            (string, int)[] terms =
+            [
+                ("Material", (b.Material - a.Material) * sign),
+                ("Piece activity", (b.PieceSquareTables + b.Mobility - a.PieceSquareTables - a.Mobility) * sign),
+                ("Attack / defense", (b.AttackDefense - a.AttackDefense) * sign),
+                ("Pawn structure", (b.PawnStructure - a.PawnStructure) * sign),
+                ("King safety", (b.KingSafety + b.Castling - a.KingSafety - a.Castling) * sign),
+            ];
+
+            // Only the terms that actually moved are worth showing.
+            return terms.Where(t => t.Item2 != 0).OrderByDescending(t => Math.Abs(t.Item2));
+        }
+    }
+
+    private string PipClass(int index)
+    {
+        if (index < _session.SolverMovesMade)
+            return _session.Outcome == PuzzleOutcome.Revealed ? "pip-shown" : "pip-found";
+        return "pip-todo";
+    }
+
+    private bool ShowFileLabel(BoardSquare square) => _session.WhiteAtBottom ? square.Row == 7 : square.Row == 0;
+    private bool ShowRankLabel(BoardSquare square) => _session.WhiteAtBottom ? square.Column == 0 : square.Column == 7;
+
+    private static string SquareClass(BoardSquare square)
+    {
+        var classes = new List<string> { "square", square.IsDark ? "dark" : "light" };
+        if (square.IsSelected) classes.Add("selected");
+        if (square.IsLastMove) classes.Add("last-move");
+        return string.Join(' ', classes);
+    }
+
+    private static string PieceColorClass(BoardSquare square) => square.PieceColor == ChessPieceColor.White ? "white-piece" : "black-piece";
+
+    private static string SquareAriaLabel(BoardSquare square)
+    {
+        if (!square.IsOccupied) return square.IsLegalTarget ? $"{square.Coordinate}, legal destination" : $"{square.Coordinate}, empty";
+        return $"{square.Coordinate}, {square.PieceColor} {square.PieceType}{(square.IsLegalTarget ? ", legal capture" : string.Empty)}";
+    }
+
+    private static string PieceGlyph(BoardSquare square) => (square.PieceType, square.PieceColor) switch
+    {
+        (ChessPieceType.King, ChessPieceColor.White) => "♔",
+        (ChessPieceType.Queen, ChessPieceColor.White) => "♕",
+        (ChessPieceType.Rook, ChessPieceColor.White) => "♖",
+        (ChessPieceType.Bishop, ChessPieceColor.White) => "♗",
+        (ChessPieceType.Knight, ChessPieceColor.White) => "♘",
+        (ChessPieceType.Pawn, ChessPieceColor.White) => "♙",
+        (ChessPieceType.King, ChessPieceColor.Black) => "♚",
+        (ChessPieceType.Queen, ChessPieceColor.Black) => "♛",
+        (ChessPieceType.Rook, ChessPieceColor.Black) => "♜",
+        (ChessPieceType.Bishop, ChessPieceColor.Black) => "♝",
+        (ChessPieceType.Knight, ChessPieceColor.Black) => "♞",
+        (ChessPieceType.Pawn, ChessPieceColor.Black) => "♟",
+        _ => string.Empty
+    };
+
+    private static string FormatSwing(int centipawns) => centipawns switch
+    {
+        > 0 => $"+{centipawns / 100d:0.00}",
+        < 0 => $"{centipawns / 100d:0.00}",
+        _ => "0.00"
+    };
+
+    /// <summary>Turns a Lichess theme slug like "hangingPiece" into "Hanging piece".</summary>
+    private static string Humanise(string theme)
+    {
+        var sb = new System.Text.StringBuilder(theme.Length + 4);
+        for (int i = 0; i < theme.Length; i++)
+        {
+            char c = theme[i];
+            if (i == 0) sb.Append(char.ToUpperInvariant(c));
+            else if (char.IsUpper(c)) sb.Append(' ').Append(char.ToLowerInvariant(c));
+            else sb.Append(c);
+        }
+        return sb.ToString();
+    }
+
+    public void Dispose() => _session.StateChanged -= OnSessionChanged;
+
+    public sealed record PuzzleProgress(string LastSolved, int Streak, int Best, int TotalSolved)
+    {
+        public static readonly PuzzleProgress Empty = new("", 0, 0, 0);
+    }
+}

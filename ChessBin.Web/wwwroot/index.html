@@ -10,7 +10,19 @@
     <base href="/" />
     <link rel="preload" id="webassembly" />
     <link rel="stylesheet" href="css/app.css" />
-    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="apple-touch-icon" href="brand/apple-touch-icon.png" />
+    <link rel="manifest" href="site.webmanifest" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="ChessBin" />
+    <meta property="og:title" content="ChessBin · Play Moonforge Chess" />
+    <meta property="og:description" content="Play Moonforge Chess in your browser and see how the engine evaluates every position." />
+    <meta property="og:url" content="https://chessbin.com/" />
+    <meta property="og:image" content="https://chessbin.com/brand/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="The ChessBin mark: a black knight and gold pawns against a blue triangle." />
+    <meta name="twitter:card" content="summary_large_image" />
     <link href="ChessBin.Web.styles.css" rel="stylesheet" />
     <script type="importmap"></script>
 </head>
@@ -29,6 +41,18 @@
         <a href="." class="reload">Reload</a>
         <span class="dismiss">🗙</span>
     </div>
+    <script>
+        // Restore the route 404.html stashed, before Blazor reads the URL. Only bare
+        // paths are accepted, so a crafted value can't turn this into an open redirect.
+        (function () {
+            var target = sessionStorage.getItem("chessbin.redirect");
+            if (!target) return;
+            sessionStorage.removeItem("chessbin.redirect");
+            if (target.charAt(0) === "/" && target.charAt(1) !== "/" && target !== "/") {
+                history.replaceState(null, "", target);
+            }
+        })();
+    </script>
     <script src="_framework/blazor.webassembly#[.{fingerprint}].js"></script>
     <script>
         window.chessBin = {
@@ -37,6 +61,8 @@
             },
             getSettings: () => localStorage.getItem("chessbin.settings"),
             saveSettings: value => localStorage.setItem("chessbin.settings", value),
+            getPuzzleProgress: () => localStorage.getItem("chessbin.puzzle"),
+            savePuzzleProgress: value => localStorage.setItem("chessbin.puzzle", value),
             getFenFromUrl: () => new URLSearchParams(window.location.search).get("fen"),
             shareFen: async fen => {
                 const url = new URL(window.location.href);

@@ -2,8 +2,15 @@
 <html lang="en">
 <head>
     <meta charset="utf-8" />
-    <meta http-equiv="refresh" content="0; url=/" />
-    <title>Returning to ChessBin…</title>
+    <title>ChessBin</title>
+    <script>
+        // GitHub Pages serves this file for any path that isn't a real file, which is
+        // every client-side route (/puzzle, and anything else the router owns). Stash the
+        // requested path and let index.html hand it back to the router after boot —
+        // without this, a direct link or refresh would silently land on the home page.
+        sessionStorage.setItem("chessbin.redirect", location.pathname + location.search + location.hash);
+        location.replace(location.origin + "/");
+    </script>
 </head>
 <body></body>
 </html>

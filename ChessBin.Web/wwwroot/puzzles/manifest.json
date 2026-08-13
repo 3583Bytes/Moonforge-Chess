@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "count": 3650,
+  "shardSize": 128,
+  "shards": 29,
+  "ratingRange": [1000, 1899],
+  "source": "lichess_db_puzzle.csv — database.lichess.org",
+  "license": "CC0-1.0",
+  "fen": "position the solver sees, after the opponent's setup move",
+  "solution": "full line from the solver's turn; solver plays even indices, opponent replies odd"
+}
