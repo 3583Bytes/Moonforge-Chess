@@ -1,14 +1,42 @@
 {
-  "name": "ChessBin · Play Moonforge Chess",
+  "name": "ChessBin — Play Chess vs the Computer",
   "short_name": "ChessBin",
-  "description": "Play the handcrafted Moonforge chess engine in your browser and watch how it evaluates every position.",
+  "description": "Play free chess against a real engine, solve a daily puzzle, and see what every move cost — all in your browser, offline, with no signup.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#0d0f13",
   "theme_color": "#0d0f13",
   "icons": [
-    { "src": "brand/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "brand/icon-512.png", "sizes": "512x512", "type": "image/png" }
+    {
+      "src": "brand/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "brand/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Daily puzzle",
+      "short_name": "Puzzle",
+      "url": "/puzzle/",
+      "description": "Today's chess puzzle"
+    },
+    {
+      "name": "Practice puzzles",
+      "short_name": "Practice",
+      "url": "/puzzle/practice/",
+      "description": "Unlimited tactics by difficulty"
+    },
+    {
+      "name": "Analyse a game",
+      "short_name": "Analyse",
+      "url": "/review/",
+      "description": "Paste a PGN and see what each move cost"
+    }
   ]
 }

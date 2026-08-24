@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Referee for the community game. Runs in CI on a schedule, never on a visitor's machine.
+    Deliberately NOT in ChessCore.sln so it can't affect the Pages or release workflows.
+    Usage is documented in tools/VoteReferee/README.md.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>VoteReferee</AssemblyName>
+    <RootNamespace>ChessBin.Tools.VoteReferee</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../ChessBin.Web/ChessBin.Web.csproj" />
+  </ItemGroup>
+
+</Project>

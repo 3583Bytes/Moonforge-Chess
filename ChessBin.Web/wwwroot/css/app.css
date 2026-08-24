@@ -135,6 +135,8 @@ button:focus-visible, select:focus-visible, a:focus-visible {
 .setup-section select { width: 100%; height: 36px; padding: 0 28px 0 10px; color: #ddd7ce; border: 1px solid #343940; background: #191c21; }
 .primary-button { grid-column: 1 / -1; height: 38px; margin-top: 3px; border: 1px solid #c99204; background: linear-gradient(#f9cc3e, #e0a505); color: #2a2102; font-weight: 700; cursor: pointer; }
 .primary-button:hover:not(:disabled) { background: linear-gradient(#fbd75f, #edb00a); }
+/* The button styling assumes a <button> in a grid; anchors need the layout stated. */
+a.primary-button { grid-column: auto; display: inline-grid; place-items: center; margin-top: 0; padding: 0 18px; text-decoration: none; }
 button:disabled { cursor: not-allowed; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 13px; }
 .section-heading h2 { margin: 0; font: 600 10px/1 ui-monospace, monospace; letter-spacing: .1em; text-transform: uppercase; }
@@ -221,6 +223,15 @@ summary { cursor: pointer; }
 .boot-links a { padding: 11px 16px; color: var(--ink); border: 1px solid var(--line); background: var(--surface); text-decoration: none; font: 600 11px/1 ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; }
 .boot-links a:hover { color: var(--gold-bright); border-color: var(--gold-line); }
 
+/* ── Community game ───────────────────────────────────────────────────────── */
+.vote-idle { gap: 16px; justify-items: start; }
+.vote-moves { margin: 4px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 1px; background: var(--line); }
+.vote-moves li { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 10px 12px; background: #12151a; }
+.vote-moves strong { font: 600 12.5px/1 ui-monospace, monospace; }
+.vote-moves span { color: #85898e; font: 500 10px/1 ui-monospace, monospace; letter-spacing: .04em; text-transform: uppercase; }
+.vote-moves .by-us strong { color: var(--gold-bright); }
+.vote-moves .by-engine strong { color: var(--cyan-text); }
+
 /* ── PGN import ───────────────────────────────────────────────────────────── */
 .paste-panel { padding: 20px; border: 1px solid var(--line); background: rgba(20, 23, 28, .88); display: grid; gap: 14px; }
 .paste-panel + .paste-panel { margin-top: 16px; }
@@ -233,7 +244,6 @@ summary { cursor: pointer; }
 .paste-side select { height: 38px; padding: 0 28px 0 10px; color: #ddd7ce; border: 1px solid #343940; background: #191c21; }
 .paste-actions .primary-button { grid-column: auto; margin-top: 0; min-width: 190px; }
 .paste-error { margin: 0; padding: 12px 14px; color: #f0d6d2; border-left: 2px solid #d4685c; background: rgba(212, 104, 92, .1); font: 400 14px/1.6 Georgia, serif; }
-.selected-move .primary-button { grid-column: auto; display: inline-grid; place-items: center; margin-top: 0; text-decoration: none; }
 .selected-move .review-why { margin: 0; }
 
 .board-panel { gap: 12px; }
@@ -331,8 +341,9 @@ summary { cursor: pointer; }
 
 .keep-going { display: grid; gap: 10px; justify-items: start; }
 .keep-going .position-message { margin: 0; }
+.keep-going a.primary-button { width: 100%; }
+.vote-idle a.primary-button { width: 220px; }
 /* .primary-button is a grid child on the game page; here it stands alone. */
-.keep-going .primary-button { grid-column: auto; display: inline-grid; place-items: center; width: 100%; margin-top: 0; text-decoration: none; }
 
 .eval-swing { display: flex; align-items: baseline; gap: 9px; margin: 0 0 14px; }
 .eval-swing strong { font: 700 24px/1 ui-monospace, monospace; font-variant-numeric: tabular-nums; }

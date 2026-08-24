@@ -1,0 +1,69 @@
+# Referee for the community game.
+#
+# Safe to leave enabled before any game exists: with state.json set to "idle" the referee
+# does nothing and exits, so the schedule can go live long before the first game does.
+name: Vote chess
+
+on:
+  schedule:
+    # Once a day, just after the usual deadline.
+    - cron: "5 12 * * *"
+  workflow_dispatch:
+    inputs:
+      command:
+        description: "tally an open round, or start a new game"
+        type: choice
+        options: [tally, start]
+        default: tally
+      issue:
+        description: "voting thread number (required to start)"
+        type: string
+        default: "0"
+      color:
+        description: "colour the community plays"
+        type: choice
+        options: [White, Black]
+        default: White
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: vote-chess
+  cancel-in-progress: false
+
+jobs:
+  referee:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Run the referee
+        run: |
+          dotnet run --project tools/VoteReferee -c Release -- \
+            "${{ inputs.command || 'tally' }}" \
+            --state ChessBin.Web/wwwroot/vote/state.json \
+            --repo "${{ github.repository }}" \
+            --token "${{ secrets.GITHUB_TOKEN }}" \
+            --issue "${{ inputs.issue || '0' }}" \
+            --color "${{ inputs.color || 'White' }}"
+
+      - name: Commit the new position
+        run: |
+          # Only the state file may change; anything else means something went wrong.
+          if git diff --quiet -- ChessBin.Web/wwwroot/vote/state.json; then
+            echo "No change to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ChessBin.Web/wwwroot/vote/state.json
+          git commit -m "Vote chess: advance the community game"
+          git push

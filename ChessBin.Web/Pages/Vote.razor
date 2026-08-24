@@ -1,0 +1,197 @@
+@page "/vote"
+@using ChessEngine.Engine
+
+<PageTitle>Community vs Moonforge | ChessBin</PageTitle>
+
+<main class="site-shell">
+    <SiteHeader />
+
+    <section class="hero">
+        <div>
+            <p class="eyebrow">@Eyebrow</p>
+            <h1>@Heading</h1>
+        </div>
+        <p class="intro">
+            Everyone votes on one move a day; whichever move gets the most votes is played, and
+            Moonforge answers. Voting happens in a thread on GitHub — watching needs nothing at all.
+        </p>
+    </section>
+
+    @if (_error is not null)
+    {
+        <section class="puzzle-error" role="alert">
+            <strong>The game state didn't load.</strong>
+            <p>@_error</p>
+            <button class="primary-button" type="button" @onclick="LoadAsync">Try again</button>
+        </section>
+    }
+    else if (_state is null)
+    {
+        <section class="puzzle-loading" aria-live="polite">Checking the board…</section>
+    }
+    else if (!_state.HasGame)
+    {
+        <section class="paste-panel vote-idle">
+            <p class="boot-note">
+                No game is running at the moment. The next one will be announced on the repository —
+                when it starts, the board and the running vote count appear here.
+            </p>
+            <a class="primary-button" href="https://github.com/3583Bytes/Moonforge-Chess" target="_blank" rel="noreferrer">
+                Watch the repository ↗
+            </a>
+        </section>
+    }
+    else
+    {
+        <section class="game-layout" aria-label="Community game">
+            <div class="board-column">
+                <div class="player-strip opponent">
+                    <div class="avatar moonforge-avatar" aria-hidden="true">☾</div>
+                    <div>
+                        <strong>Moonforge</strong>
+                        <span>@(_state.Community == ChessPieceColor.White ? "Black" : "White")</span>
+                    </div>
+                    <span class="rating-chip">@_state.Fen.Split(' ')[1].ToUpperInvariant() to move</span>
+                </div>
+
+                <div class="board-wrap">
+                    <ChessBoardView Squares="Squares"
+                                    WhiteAtBottom="@(_state.Community == ChessPieceColor.White)"
+                                    Interactive="false"
+                                    Label="Community game position" />
+                </div>
+
+                <div class="player-strip">
+                    <div class="avatar human-avatar" aria-hidden="true">Us</div>
+                    <div>
+                        <strong>The community</strong>
+                        <span>@_state.CommunityColor</span>
+                    </div>
+                </div>
+
+                <p class="status-line" aria-live="polite">
+                    <span class="status-icon">@(_state.IsFinished ? "◆" : "●")</span> @Status
+                </p>
+            </div>
+
+            <aside class="control-panel puzzle-panel">
+                <div class="panel-tabs">
+                    <button type="button">Game @_state.Game</button>
+                    <span>@_state.History.Length ply</span>
+                </div>
+
+                <section class="panel-section">
+                    <div class="section-heading">
+                        <h2>How to vote</h2>
+                        <span>GitHub</span>
+                    </div>
+                    <p class="position-message">
+                        Reply in the thread with a move in algebraic notation — <code class="inline">Nf6</code>,
+                        <code class="inline">exd5</code>, <code class="inline">O-O</code>. One vote each; your
+                        latest reply is the one that counts.
+                    </p>
+                    @if (_state.Issue > 0)
+                    {
+                        <a class="primary-button" href="@IssueUrl" target="_blank" rel="noreferrer">
+                            @(_state.IsFinished ? "Read the thread ↗" : "Cast your vote ↗")
+                        </a>
+                    }
+                </section>
+
+                @if (_state.History.Length > 0)
+                {
+                    <section class="panel-section">
+                        <div class="section-heading">
+                            <h2>Moves so far</h2>
+                            <span>votes shown</span>
+                        </div>
+                        <ol class="vote-moves">
+                            @foreach (VoteMove m in _state.History.Reverse())
+                            {
+                                <li class="@(m.IsCommunity ? "by-us" : "by-engine")">
+                                    <strong>@m.Reference</strong>
+                                    <span>@(m.IsCommunity ? $"{m.Votes} vote{(m.Votes == 1 ? "" : "s")}" : "Moonforge")</span>
+                                </li>
+                            }
+                        </ol>
+                    </section>
+                }
+            </aside>
+        </section>
+    }
+
+    <footer class="site-footer">
+        <span>The board is a file in the repository; a scheduled job is the referee.</span>
+        <span>No server, no account needed to watch.</span>
+    </footer>
+</main>
+
+@code {
+    private VoteState? _state;
+    private Engine? _board;
+    private string? _error;
+
+    [Inject] private HttpClient Http { get; set; } = null!;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _error = null;
+        try
+        {
+            // Cache-busted: the state changes on a schedule, and a stale board is worse than
+            // a slow one.
+            string json = await Http.GetStringAsync($"{VoteChess.StatePath}?v={DateTime.UtcNow:yyyyMMddHHmm}");
+            _state = VoteChess.Parse(json);
+
+            var engine = new Engine(_state.Fen);
+            engine.GenerateValidMoves();
+            _board = engine;
+        }
+        catch (Exception ex)
+        {
+            _error = $"{ex.Message} You can retry, or come back in a moment.";
+        }
+
+        StateHasChanged();
+    }
+
+    private IReadOnlyList<BoardSquare> Squares
+    {
+        get
+        {
+            if (_board is null || _state is null) return [];
+            VoteMove? last = _state.History.LastOrDefault();
+            (int from, int to) = last is null ? (-1, -1) : SquaresOf(last.Uci);
+            return BoardView.Squares(_board, _state.Community == ChessPieceColor.White, from, to);
+        }
+    }
+
+    private static (int From, int To) SquaresOf(string uci) =>
+        uci.Length < 4 ? (-1, -1)
+        : ((uci[0] - 'a') + (8 - (uci[1] - '0')) * 8, (uci[2] - 'a') + (8 - (uci[3] - '0')) * 8);
+
+    private string Eyebrow => _state is null || !_state.HasGame
+        ? "Community game"
+        : _state.IsFinished ? $"Game {_state.Game} · finished" : $"Game {_state.Game} · one move a day";
+
+    private string Heading => _state?.IsFinished == true ? _state.Result : "Everyone versus the engine.";
+
+    private string Status
+    {
+        get
+        {
+            if (_state is null) return "";
+            if (_state.IsFinished) return $"{_state.Result}. Thanks for playing.";
+            if (_state.Deadline is not DateTimeOffset deadline) return "Voting is open.";
+
+            TimeSpan left = deadline - DateTimeOffset.UtcNow;
+            return left <= TimeSpan.Zero
+                ? "Voting has closed — the next move is being counted."
+                : $"Voting closes in {(left.TotalHours >= 1 ? $"{(int)left.TotalHours}h {left.Minutes}m" : $"{left.Minutes}m")}.";
+        }
+    }
+
+    private string IssueUrl => $"https://github.com/3583Bytes/Moonforge-Chess/issues/{_state?.Issue}";
+}

@@ -14,12 +14,22 @@
          back to true if the site ever moves behind a CDN that serves them (Cloudflare
          would, and brotli beats Pages' gzip by roughly 200 KB on the runtime alone). -->
     <CompressionEnabled>false</CompressionEnabled>
+    <!-- Emits service-worker-assets.js, the hashed list the service worker precaches from.
+         Without it the worker has nothing to install and the app is not installable. -->
+    <ServiceWorkerAssetsManifest>service-worker-assets.js</ServiceWorkerAssetsManifest>
     <AssemblyName>ChessBin.Web</AssemblyName>
     <RootNamespace>ChessBin.Web</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\ChessCoreEngine\ChessCoreEngine.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Development gets a deliberately inert worker so local edits are never served from a
+         cache; publish swaps in the real one. -->
+    <ServiceWorker Include="wwwroot/service-worker.js"
+                   PublishedContent="wwwroot/service-worker.published.js" />
   </ItemGroup>
 
   <ItemGroup>

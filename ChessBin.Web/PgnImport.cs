@@ -42,11 +42,6 @@ public static class PgnImport
 
     private static readonly Regex TagPair = new(@"^\s*\[\s*(\w+)\s*""([^""]*)""\s*\]\s*$", RegexOptions.Compiled);
 
-    /// <summary>SAN: piece, optional disambiguation, optional capture, target, optional promotion.</summary>
-    private static readonly Regex San = new(
-        @"^(?<piece>[KQRBN])?(?<ff>[a-h])?(?<fr>[1-8])?(?<cap>x)?(?<tf>[a-h])(?<tr>[1-8])(?:=?(?<promo>[QRBN]))?$",
-        RegexOptions.Compiled);
-
     public static PgnImportResult Parse(string pgn)
     {
         if (string.IsNullOrWhiteSpace(pgn))
@@ -159,112 +154,31 @@ public static class PgnImport
 
     private static PlayedMove? ApplySan(Engine engine, string sanToken)
     {
-        string san = Clean(sanToken);
-        if (san.Length == 0) return null;
-
-        ChessPieceColor mover = engine.WhoseMove;
-
-        if (IsCastle(san, out bool kingSide))
-        {
-            int row = mover == ChessPieceColor.White ? 7 : 0;
-            int kingTo = kingSide ? 6 : 2;
-            // Engine.MovePiece applies whatever it is handed without checking legality, so the
-            // generator is the gate here as it is for every other move.
-            return CanReach(engine, 4, row, kingTo, row)
-                ? TryMove(engine, 4, row, kingTo, row, ChessPieceType.Queen, sanToken)
-                : null;
-        }
-
-        Match m = San.Match(san);
-        if (!m.Success) return null;
-
-        int toColumn = m.Groups["tf"].Value[0] - 'a';
-        int toRow = 8 - (m.Groups["tr"].Value[0] - '0');
-        ChessPieceType piece = m.Groups["piece"].Success ? PieceFrom(m.Groups["piece"].Value[0]) : ChessPieceType.Pawn;
-        ChessPieceType promo = m.Groups["promo"].Success ? PieceFrom(m.Groups["promo"].Value[0]) : ChessPieceType.Queen;
-        int? fromFile = m.Groups["ff"].Success ? m.Groups["ff"].Value[0] - 'a' : null;
-        int? fromRank = m.Groups["fr"].Success ? 8 - (m.Groups["fr"].Value[0] - '0') : null;
-
-        // Find every piece of that type which can legally reach the target, then apply the
-        // notation's disambiguation hints. Valid PGN leaves exactly one.
-        var candidates = new List<(int Column, int Row)>();
-        for (byte column = 0; column < 8; column++)
-        {
-            for (byte row = 0; row < 8; row++)
-            {
-                if (engine.GetPieceTypeAt(column, row) != piece) continue;
-                if (engine.GetPieceColorAt(column, row) != mover) continue;
-                if (fromFile is int ff && column != ff) continue;
-                if (fromRank is int fr && row != fr) continue;
-                if (!CanReach(engine, column, row, toColumn, toRow)) continue;
-                candidates.Add((column, row));
-            }
-        }
-
-        // The mailbox generator can offer a move that leaves the king in check, so let the
-        // engine reject it and fall through to the next candidate rather than trusting the list.
-        foreach ((int column, int row) in candidates)
-        {
-            PlayedMove? applied = TryMove(engine, column, row, toColumn, toRow, promo, sanToken);
-            if (applied is not null) return applied;
-        }
-
-        return null;
-    }
-
-    private static bool CanReach(Engine engine, int column, int row, int toColumn, int toRow)
-    {
-        byte[][]? targets = engine.GetValidMoves((byte)column, (byte)row);
-        if (targets is null) return false;
-        foreach (byte[] t in targets)
-        {
-            if (t[0] == toColumn && t[1] == toRow) return true;
-        }
-        return false;
-    }
-
-    private static PlayedMove? TryMove(
-        Engine engine, int fromColumn, int fromRow, int toColumn, int toRow, ChessPieceType promotion, string label)
-    {
-        engine.PromoteToPieceType = promotion;
-        if (!engine.MovePiece((byte)fromColumn, (byte)fromRow, (byte)toColumn, (byte)toRow)) return null;
+        // Resolution lives in the engine so the vote referee can use it too; PgnImport only
+        // needs to record what was played.
+        if (!SanMove.TryApply(engine, sanToken)) return null;
 
         MoveContent last = engine.LastMove;
-        string uci = $"{(char)('a' + fromColumn)}{8 - fromRow}{(char)('a' + toColumn)}{8 - toRow}"
-                   + PromotionSuffix(promotion, toRow, last);
+        byte from = last.MovingPiecePrimary.SrcPosition;
+        byte to = last.MovingPiecePrimary.DstPosition;
 
-        return new PlayedMove(uci, Clean(label), last.MovingPiecePrimary.SrcPosition, last.MovingPiecePrimary.DstPosition);
+        string uci = $"{(char)('a' + from % 8)}{8 - from / 8}{(char)('a' + to % 8)}{8 - to / 8}"
+                   + PromotionSuffix(last);
+
+        return new PlayedMove(uci, Clean(sanToken), from, to);
     }
 
-    private static string PromotionSuffix(ChessPieceType promotion, int toRow, MoveContent last) =>
-        toRow is not (0 or 7) || last.PawnPromotedTo == ChessPieceType.None
-            ? string.Empty
-            : promotion switch
-            {
-                ChessPieceType.Queen => "q",
-                ChessPieceType.Rook => "r",
-                ChessPieceType.Bishop => "b",
-                ChessPieceType.Knight => "n",
-                _ => string.Empty,
-            };
+    /// <summary>Encodes the promotion the engine actually performed, for the UCI string.</summary>
+    private static string PromotionSuffix(MoveContent last) => last.PawnPromotedTo switch
+    {
+        ChessPieceType.Queen => "q",
+        ChessPieceType.Rook => "r",
+        ChessPieceType.Bishop => "b",
+        ChessPieceType.Knight => "n",
+        _ => string.Empty,
+    };
 
     /// <summary>Drops the annotation marks SAN allows to trail a move.</summary>
     private static string Clean(string token) => token.Trim().TrimEnd('+', '#', '!', '?');
 
-    private static bool IsCastle(string san, out bool kingSide)
-    {
-        string s = san.Replace('0', 'O').Replace("--", "-");
-        kingSide = s is "O-O" or "OO";
-        return kingSide || s is "O-O-O" or "OOO";
-    }
-
-    private static ChessPieceType PieceFrom(char c) => c switch
-    {
-        'K' => ChessPieceType.King,
-        'Q' => ChessPieceType.Queen,
-        'R' => ChessPieceType.Rook,
-        'B' => ChessPieceType.Bishop,
-        'N' => ChessPieceType.Knight,
-        _ => ChessPieceType.Pawn,
-    };
 }

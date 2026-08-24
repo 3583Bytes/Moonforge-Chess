@@ -12,6 +12,14 @@
     }
 })();
 
+// Registered from every boot page, at the root so its scope covers all routes. Failure is
+// non-fatal: without a worker the site simply behaves as it did before, online only.
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js').catch(() => { });
+    });
+}
+
 window.chessBin = {
     copyText: async text => {
         if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(text);
