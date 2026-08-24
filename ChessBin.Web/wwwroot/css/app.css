@@ -221,6 +221,21 @@ summary { cursor: pointer; }
 .boot-links a { padding: 11px 16px; color: var(--ink); border: 1px solid var(--line); background: var(--surface); text-decoration: none; font: 600 11px/1 ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; }
 .boot-links a:hover { color: var(--gold-bright); border-color: var(--gold-line); }
 
+/* ── PGN import ───────────────────────────────────────────────────────────── */
+.paste-panel { padding: 20px; border: 1px solid var(--line); background: rgba(20, 23, 28, .88); display: grid; gap: 14px; }
+.paste-panel + .paste-panel { margin-top: 16px; }
+.paste-label { color: #858990; font: 600 9px/1 ui-monospace, monospace; letter-spacing: .1em; text-transform: uppercase; }
+.pgn-input { width: 100%; min-width: 0; padding: 12px; color: #ddd7ce; border: 1px solid #343940; background: #111318; font: 500 11px/1.6 ui-monospace, monospace; resize: vertical; }
+.pgn-input:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.paste-actions { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.paste-side { display: grid; gap: 7px; }
+.paste-side > span { color: #858990; font: 600 9px/1 ui-monospace, monospace; letter-spacing: .1em; text-transform: uppercase; }
+.paste-side select { height: 38px; padding: 0 28px 0 10px; color: #ddd7ce; border: 1px solid #343940; background: #191c21; }
+.paste-actions .primary-button { grid-column: auto; margin-top: 0; min-width: 190px; }
+.paste-error { margin: 0; padding: 12px 14px; color: #f0d6d2; border-left: 2px solid #d4685c; background: rgba(212, 104, 92, .1); font: 400 14px/1.6 Georgia, serif; }
+.selected-move .primary-button { grid-column: auto; display: inline-grid; place-items: center; margin-top: 0; text-decoration: none; }
+.selected-move .review-why { margin: 0; }
+
 /* ── Evaluation graph ─────────────────────────────────────────────────────────
    Diverging area on a zero baseline: gold above means the player was ahead, cyan
    below means Moonforge was. Both hues are the site's existing meanings stepped

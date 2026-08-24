@@ -22,6 +22,7 @@ public sealed record ReviewedMove(
     ChessPieceColor Mover,
     int Loss,
     int ScoreAfter,
+    string FenAfter,
     MoveVerdict Verdict,
     IReadOnlyList<TermDelta> Terms,
     string Explanation)
@@ -115,6 +116,7 @@ public static class GameReviewer
         var pvs = new List<string>(moves.Count + 1);
         var statics = new List<EvaluationBreakdown> { engine.GetEvaluationBreakdown() };
         var movers = new List<ChessPieceColor>(moves.Count);
+        var fens = new List<string>(moves.Count);
         int played = 0;
 
         // One search per position: the score after move i is also the score before move i+1.
@@ -133,6 +135,7 @@ public static class GameReviewer
             movers.Add(engine.WhoseMove);
             if (!PuzzleData.TryApplyUci(engine, moves[k].Uci)) break;   // unreplayable game stops here
             statics.Add(engine.GetEvaluationBreakdown());
+            fens.Add(engine.FEN);
             played++;
         }
 
@@ -183,6 +186,7 @@ public static class GameReviewer
                 Mover: mover,
                 Loss: Math.Max(0, loss),
                 ScoreAfter: ScoreForHuman(i + 1),
+                FenAfter: i < fens.Count ? fens[i] : string.Empty,
                 Verdict: verdict,
                 Terms: terms,
                 Explanation: Describe(verdict, loss, terms, preferred))

@@ -1,0 +1,79 @@
+@*
+    The review read-out, shared by the game page (reviewing the game you just played) and
+    the import page (reviewing a game from somewhere else). Both need exactly this, so it
+    lives once.
+*@
+
+<div class="section-heading">
+    <h2>Game review</h2>
+    <span>@(Review is not null ? Tally : "Moonforge's read")</span>
+</div>
+
+@if (Busy)
+{
+    <div class="eval-track" aria-hidden="true"><span style="width: @Percent%"></span></div>
+    <p class="position-message" aria-live="polite">Checking position @Done of @Total…</p>
+}
+else if (Review is null)
+{
+    <p class="position-message">See what every move cost — and why, in the engine's own terms.</p>
+    <button class="primary-button" type="button" @onclick="OnStart">@StartLabel</button>
+}
+else if (Review.Notable.Count == 0)
+{
+    <EvalGraph Review="Review" OnSelectPly="OnSelectPly" />
+    <p class="position-message">Nothing stood out — no move cost more than @(GameReviewer.InaccuracyLoss / 100d) of a pawn.</p>
+}
+else
+{
+    <EvalGraph Review="Review" OnSelectPly="OnSelectPly" />
+
+    <ol class="review-list">
+        @foreach (ReviewedMove m in Review.Notable)
+        {
+            <li>
+                <button class="review-jump" type="button" @onclick="() => OnSelectPly.InvokeAsync(m.Ply)"
+                        title="@SelectHint">
+                    <span class="review-head">
+                        <strong>@m.Reference</strong>
+                        <span class="verdict v-@m.Verdict.ToString().ToLowerInvariant()">@m.Verdict</span>
+                        <span class="review-cost">@Cost(m.Loss)</span>
+                    </span>
+                    <span class="review-why">@m.Explanation</span>
+                </button>
+            </li>
+        }
+    </ol>
+}
+
+@code {
+    [Parameter] public GameReviewResult? Review { get; set; }
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public int Done { get; set; }
+    [Parameter] public int Total { get; set; }
+    [Parameter] public string StartLabel { get; set; } = "Review this game";
+    [Parameter] public string SelectHint { get; set; } = "Show this position on the board";
+    [Parameter] public EventCallback OnStart { get; set; }
+    [Parameter] public EventCallback<int> OnSelectPly { get; set; }
+
+    private double Percent => Total == 0 ? 0 : Math.Clamp(Done * 100d / Total, 2, 100);
+
+    private string Tally
+    {
+        get
+        {
+            if (Review is null) return string.Empty;
+            var parts = new List<string>();
+            void Add(int n, string one, string many)
+            {
+                if (n > 0) parts.Add($"{n} {(n == 1 ? one : many)}");
+            }
+            Add(Review.Count(MoveVerdict.Blunder), "blunder", "blunders");
+            Add(Review.Count(MoveVerdict.Mistake), "mistake", "mistakes");
+            Add(Review.Count(MoveVerdict.Inaccuracy), "inaccuracy", "inaccuracies");
+            return parts.Count == 0 ? "clean game" : string.Join(" · ", parts);
+        }
+    }
+
+    private static string Cost(int centipawns) => $"−{Math.Abs(centipawns) / 100d:0.00}";
+}

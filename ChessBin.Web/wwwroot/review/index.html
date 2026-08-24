@@ -2,19 +2,18 @@
 <html lang="en">
 
 <!--
-    Boot page for /puzzle/practice. Without it the route fell through to 404.html, which
-    works in a browser but answers 404 to crawlers, link previews and anything that cannot
-    run JavaScript.
+    Boot page for /review. Same reasoning as the other routes: a real 200 response, its own
+    title and social card, and content a crawler can read without executing WebAssembly.
 -->
 
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Practise chess tactics with unlimited puzzles by difficulty, free and in your browser. See the engine's evaluation after every solve." />
+    <meta name="description" content="Paste a PGN and get free chess game analysis in your browser. Moonforge names which part of the position each move cost you — not just a number." />
     <meta name="theme-color" content="#0d0f13" />
-    <title>Chess Tactics Practice — Unlimited Puzzles | ChessBin</title>
+    <title>Chess Game Analysis — Paste a PGN | ChessBin</title>
     <base href="/" />
-    <link rel="canonical" href="https://chessbin.com/puzzle/practice/" />
+    <link rel="canonical" href="https://chessbin.com/review/" />
     <link rel="preload" id="webassembly" />
     <link rel="stylesheet" href="css/app.css" />
     <link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48" />
@@ -22,9 +21,9 @@
     <link rel="manifest" href="site.webmanifest" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="ChessBin" />
-    <meta property="og:title" content="ChessBin · Chess tactics practice" />
-    <meta property="og:description" content="Practise chess tactics with unlimited puzzles by difficulty, free and in your browser. See the engine's evaluation after every solve." />
-    <meta property="og:url" content="https://chessbin.com/puzzle/practice/" />
+    <meta property="og:title" content="ChessBin · Chess game analysis" />
+    <meta property="og:description" content="Paste a PGN and get free chess game analysis in your browser. Moonforge names which part of the position each move cost you — not just a number." />
+    <meta property="og:url" content="https://chessbin.com/review/" />
     <meta property="og:image" content="https://chessbin.com/brand/og-puzzle.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -36,13 +35,13 @@
     {
       "@context": "https://schema.org",
       "@type": "WebApplication",
-      "name": "ChessBin Chess Puzzle Practice",
-      "url": "https://chessbin.com/puzzle/practice/",
+      "name": "ChessBin Game Analysis",
+      "url": "https://chessbin.com/review/",
       "applicationCategory": "GameApplication",
       "operatingSystem": "Any modern web browser",
       "isAccessibleForFree": true,
       "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-      "description": "Unlimited chess tactics puzzles by difficulty, solved in your browser."
+      "description": "Free chess game analysis in the browser: paste a PGN and see what each move cost, broken down by named evaluation terms."
     }
     </script>
 </head>
@@ -60,24 +59,24 @@
                 <nav class="site-nav" aria-label="Sections">
                 <a href="/">Play</a>
                 <a href="/puzzle/">Daily puzzle</a>
-                <a href="/puzzle/practice/" class="active">Practice</a>
-                <a href="/review/">Analyse</a>
+                <a href="/puzzle/practice/">Practice</a>
+                <a href="/review/" class="active">Analyse</a>
                 </nav>
             </header>
 
             <section class="hero">
                 <div>
-                    <p class="eyebrow">As many as you want</p>
-                    <h1>Chess tactics practice.</h1>
+                    <p class="eyebrow">Game analysis · free · no signup</p>
+                    <h1>Why did that move lose?</h1>
                 </div>
-                <p class="intro">Puzzles from the same set as the daily, as many as you like, filtered by difficulty. Nothing here touches your daily streak.</p>
+                <p class="intro">Paste a game from Lichess, Chess.com or your own notation and see what each move cost — and which part of the position paid for it.</p>
             </section>
 
-            <p class="boot-note">Pick easy, medium or hard and keep going. Each solve shows the engine's read on what changed, so you can see why the line works rather than just being told it does.</p>
+            <p class="boot-note">Moonforge scores positions from named terms — material, king safety, pawn structure, mobility — so a review can say which of them a move gave away. Engines built on neural networks cannot: their evaluation is a single number with no parts to name. Nothing you paste leaves your browser.</p>
 
             <nav class="boot-links" aria-label="Go to">
-            <a href="/puzzle/">Today's puzzle</a>
-            <a href="/">Play a full game</a>
+            <a href="/puzzle/">Today&#39;s puzzle</a>
+            <a href="/">Play the engine</a>
             </nav>
 
             <div class="boot-status" role="status">

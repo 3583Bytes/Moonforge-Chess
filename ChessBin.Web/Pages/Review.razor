@@ -1,0 +1,165 @@
+@page "/review"
+@using ChessEngine.Engine
+@implements IDisposable
+
+<PageTitle>Chess Game Analysis — Paste a PGN | ChessBin</PageTitle>
+
+<main class="site-shell">
+    <SiteHeader />
+
+    <section class="hero">
+        <div>
+            <p class="eyebrow">Game analysis · free · no signup</p>
+            <h1>@(_game is null ? "Why did that move lose?" : _game.Title)</h1>
+        </div>
+        <p class="intro">
+            Paste a game from anywhere — Lichess, Chess.com, your own notation — and Moonforge
+            will say what each move cost and which part of the position paid for it.
+        </p>
+    </section>
+
+    <section class="game-layout" aria-label="Game analysis">
+        <div class="board-column">
+            <section class="paste-panel">
+                <label class="paste-label" for="pgn">Paste PGN</label>
+                <textarea id="pgn" class="pgn-input" rows="12" spellcheck="false"
+                          placeholder="[Event &quot;Rated Blitz game&quot;]&#10;...&#10;&#10;1. e4 e5 2. Nf3 Nc6 3. Bc4 ..."
+                          @bind="_pgn" @bind:event="oninput"></textarea>
+
+                <div class="paste-actions">
+                    <label class="paste-side">
+                        <span>Review from</span>
+                        <select @bind="_side">
+                            <option value="@ChessPieceColor.White">White's side</option>
+                            <option value="@ChessPieceColor.Black">Black's side</option>
+                        </select>
+                    </label>
+                    <button class="primary-button" type="button" disabled="@(_busy || string.IsNullOrWhiteSpace(_pgn))"
+                            @onclick="ImportAndReviewAsync">
+                        @(_busy ? "Working…" : "Analyse this game")
+                    </button>
+                </div>
+
+                @if (_error is not null)
+                {
+                    <p class="paste-error" role="alert">@_error</p>
+                }
+                else if (_game is not null)
+                {
+                    <p class="position-message">
+                        @_game.Moves.Count moves read@(string.IsNullOrWhiteSpace(_game.Result) ? "" : $", result {_game.Result}").
+                        @if (!_game.StartsFromStandardPosition)
+                        {
+                            <text>Starting from the position in the game's FEN tag.</text>
+                        }
+                    </p>
+                }
+            </section>
+
+            @if (_selected is not null)
+            {
+                <section class="paste-panel selected-move">
+                    <div class="section-heading">
+                        <h2>@_selected.Reference</h2>
+                        <span>@_selected.Verdict.ToString().ToLowerInvariant()</span>
+                    </div>
+                    <p class="review-why">@_selected.Explanation</p>
+                    <a class="primary-button" href="@($"/?fen={Uri.EscapeDataString(_selected.FenAfter)}")">
+                        Open this position on the board
+                    </a>
+                </section>
+            }
+        </div>
+
+        <aside class="control-panel puzzle-panel">
+            <div class="panel-tabs">
+                <button type="button">Analysis</button>
+                <span>@(_review is null ? "paste a game" : $"{_review.HumanMoves} of your moves")</span>
+            </div>
+            <section class="panel-section">
+                <GameReviewPanel Review="_review"
+                                 Busy="_busy"
+                                 Done="_done"
+                                 Total="_total"
+                                 StartLabel="Analyse this game"
+                                 SelectHint="Show the details for this move"
+                                 OnStart="ImportAndReviewAsync"
+                                 OnSelectPly="Select" />
+            </section>
+        </aside>
+    </section>
+
+    <footer class="site-footer">
+        <span>Analysis runs on your device. Nothing you paste is uploaded.</span>
+        <span>Moonforge scores positions from named terms, not a neural network.</span>
+    </footer>
+</main>
+
+@code {
+    private string _pgn = string.Empty;
+    private ChessPieceColor _side = ChessPieceColor.White;
+    private PgnGame? _game;
+    private GameReviewResult? _review;
+    private ReviewedMove? _selected;
+    private string? _error;
+    private bool _busy;
+    private int _done, _total;
+    private CancellationTokenSource? _cancellation;
+
+    private async Task ImportAndReviewAsync()
+    {
+        if (_busy) return;
+
+        _error = null;
+        _review = null;
+        _selected = null;
+
+        PgnImportResult parsed = PgnImport.Parse(_pgn);
+        if (!parsed.Success)
+        {
+            _game = null;
+            _error = parsed.Error;
+            return;
+        }
+
+        _game = parsed.Game;
+        if (_game!.Moves.Count == 0)
+        {
+            _error = "That game has no moves to analyse.";
+            return;
+        }
+
+        _cancellation?.Cancel();
+        _cancellation?.Dispose();
+        _cancellation = new CancellationTokenSource();
+
+        _busy = true;
+        _done = 0;
+        _total = _game.Moves.Count + 1;
+
+        try
+        {
+            _review = await GameReviewer.ReviewAsync(
+                _game.StartFen, _game.Moves, _side,
+                progress: (done, total) => { _done = done; _total = total; StateHasChanged(); },
+                token: _cancellation.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            _review = null;
+        }
+        finally
+        {
+            _busy = false;
+            StateHasChanged();
+        }
+    }
+
+    private void Select(int ply) => _selected = _review?.Moves.FirstOrDefault(m => m.Ply == ply);
+
+    public void Dispose()
+    {
+        _cancellation?.Cancel();
+        _cancellation?.Dispose();
+    }
+}
