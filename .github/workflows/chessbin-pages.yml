@@ -36,6 +36,11 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
+      # Without this workload, `dotnet publish` prints "Publishing without optimizations"
+      # and ships an unrelinked dotnet.native.wasm. Runner-local SDK, so no sudo needed.
+      - name: Install wasm-tools
+        run: dotnet workload install wasm-tools
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 

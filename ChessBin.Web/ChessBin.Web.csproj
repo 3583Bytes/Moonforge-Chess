@@ -5,6 +5,10 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
+    <!-- The only culture-sensitive formatting on the site is the puzzle date, which
+         renders "24 August 2026" under the invariant culture. Dropping ICU removes the
+         globalization shard every visitor would otherwise download. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
     <AssemblyName>ChessBin.Web</AssemblyName>
     <RootNamespace>ChessBin.Web</RootNamespace>
   </PropertyGroup>
