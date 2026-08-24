@@ -139,7 +139,7 @@ public static class PuzzleData
             ?? throw new InvalidDataException("puzzle shard did not deserialise");
 
     /// <summary>
-    /// Applies one UCI move to the engine.
+    /// Applies one UCI move to the engine, returning false if it is not legal.
     /// <para>
     /// <see cref="Engine.MovePieceAN"/> only accepts a bare four-character coordinate pair
     /// and ignores its own parse failure, so handing it a promotion such as "e7e8q" would

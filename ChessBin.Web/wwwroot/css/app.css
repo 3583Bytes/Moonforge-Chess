@@ -236,6 +236,12 @@ summary { cursor: pointer; }
 .selected-move .primary-button { grid-column: auto; display: inline-grid; place-items: center; margin-top: 0; text-decoration: none; }
 .selected-move .review-why { margin: 0; }
 
+.board-panel { gap: 12px; }
+.board-panel .board-wrap { margin-top: 0; }
+.board-panel .move-navigation { margin-top: 0; }
+.text-link { color: #8d9196; font: 600 10px/1 ui-monospace, monospace; letter-spacing: .06em; text-transform: uppercase; text-decoration: none; }
+.text-link:hover { color: var(--gold-bright); }
+
 /* ── Evaluation graph ─────────────────────────────────────────────────────────
    Diverging area on a zero baseline: gold above means the player was ahead, cyan
    below means Moonforge was. Both hues are the site's existing meanings stepped

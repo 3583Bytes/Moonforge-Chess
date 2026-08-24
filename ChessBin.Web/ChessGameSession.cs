@@ -116,34 +116,13 @@ public sealed class ChessGameSession : IDisposable
 
     public IReadOnlyList<BoardSquare> GetDisplaySquares()
     {
-        var squares = new List<BoardSquare>(64);
-        IEnumerable<int> rows = WhiteAtBottom ? Enumerable.Range(0, 8) : Enumerable.Range(0, 8).Reverse();
-        IEnumerable<int> columns = WhiteAtBottom ? Enumerable.Range(0, 8) : Enumerable.Range(0, 8).Reverse();
+        int lastFrom = _currentPly > 0 ? _moves[_currentPly - 1].FromIndex : -1;
+        int lastTo = _currentPly > 0 ? _moves[_currentPly - 1].ToIndex : -1;
 
-        foreach (int row in rows)
-        {
-            foreach (int column in columns)
-            {
-                var type = _engine.GetPieceTypeAt((byte)column, (byte)row);
-                ChessPieceColor? color = type == ChessPieceType.None
-                    ? null
-                    : _engine.GetPieceColorAt((byte)column, (byte)row);
-                int index = column + row * 8;
-                bool isLastMove = _currentPly > 0
-                    && (index == _moves[_currentPly - 1].FromIndex || index == _moves[_currentPly - 1].ToIndex);
-
-                squares.Add(new BoardSquare(
-                    column,
-                    row,
-                    type,
-                    color,
-                    index == _selectedSquare,
-                    _legalTargets.Contains(index),
-                    isLastMove));
-            }
-        }
-
-        return squares;
+        return BoardView.Squares(_engine, WhiteAtBottom,
+            isSelected: i => i == _selectedSquare,
+            isLegalTarget: _legalTargets.Contains,
+            isLastMove: i => i == lastFrom || i == lastTo);
     }
 
     public async Task ClickSquareAsync(int column, int row)

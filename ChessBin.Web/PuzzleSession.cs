@@ -100,35 +100,11 @@ public sealed class PuzzleSession
         NotifyStateChanged();
     }
 
-    public IReadOnlyList<BoardSquare> GetDisplaySquares()
-    {
-        var squares = new List<BoardSquare>(64);
-        IEnumerable<int> rows = WhiteAtBottom ? Enumerable.Range(0, 8) : Enumerable.Range(0, 8).Reverse();
-        IEnumerable<int> columns = WhiteAtBottom ? Enumerable.Range(0, 8) : Enumerable.Range(0, 8).Reverse();
-
-        foreach (int row in rows)
-        {
-            foreach (int column in columns)
-            {
-                var type = _engine.GetPieceTypeAt((byte)column, (byte)row);
-                ChessPieceColor? color = type == ChessPieceType.None
-                    ? null
-                    : _engine.GetPieceColorAt((byte)column, (byte)row);
-                int index = column + row * 8;
-
-                squares.Add(new BoardSquare(
-                    column,
-                    row,
-                    type,
-                    color,
-                    index == _selectedSquare || index == HintSquare,
-                    _legalTargets.Contains(index),
-                    index == _lastFrom || index == _lastTo));
-            }
-        }
-
-        return squares;
-    }
+    public IReadOnlyList<BoardSquare> GetDisplaySquares() =>
+        BoardView.Squares(_engine, WhiteAtBottom,
+            isSelected: i => i == _selectedSquare || i == HintSquare,
+            isLegalTarget: _legalTargets.Contains,
+            isLastMove: i => i == _lastFrom || i == _lastTo);
 
     public async Task ClickSquareAsync(int column, int row)
     {

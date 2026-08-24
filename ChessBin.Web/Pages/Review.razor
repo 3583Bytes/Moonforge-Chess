@@ -56,16 +56,35 @@
                 }
             </section>
 
-            @if (_selected is not null)
+            @if (_board is not null && _game is not null)
             {
-                <section class="paste-panel selected-move">
+                <section class="paste-panel board-panel">
                     <div class="section-heading">
-                        <h2>@_selected.Reference</h2>
-                        <span>@_selected.Verdict.ToString().ToLowerInvariant()</span>
+                        <h2>@(_selected?.Reference ?? "Starting position")</h2>
+                        <span>@PositionLabel</span>
                     </div>
-                    <p class="review-why">@_selected.Explanation</p>
-                    <a class="primary-button" href="@($"/?fen={Uri.EscapeDataString(_selected.FenAfter)}")">
-                        Open this position on the board
+
+                    <div class="board-wrap">
+                        <ChessBoardView Squares="BoardSquares"
+                                        WhiteAtBottom="@(_side == ChessPieceColor.White)"
+                                        Interactive="false"
+                                        Label="@($"Position after {_ply} of {_game.Moves.Count} moves")" />
+                    </div>
+
+                    <div class="move-navigation" aria-label="Step through the game">
+                        <button type="button" disabled="@(_ply == 0)" @onclick="() => GoToPly(0)" title="Start">|◀</button>
+                        <button type="button" disabled="@(_ply == 0)" @onclick="() => GoToPly(_ply - 1)" title="Previous move">◀</button>
+                        <button type="button" disabled="@(_ply >= _game.Moves.Count)" @onclick="() => GoToPly(_ply + 1)" title="Next move">▶</button>
+                        <button type="button" disabled="@(_ply >= _game.Moves.Count)" @onclick="() => GoToPly(_game.Moves.Count)" title="End">▶|</button>
+                    </div>
+
+                    @if (_selected is not null)
+                    {
+                        <p class="review-why">@_selected.Explanation</p>
+                    }
+
+                    <a class="text-link" href="@($"/?fen={Uri.EscapeDataString(CurrentFen)}")">
+                        Play on from this position →
                     </a>
                 </section>
             }
@@ -103,6 +122,8 @@
     private ReviewedMove? _selected;
     private string? _error;
     private bool _busy;
+    private Engine? _board;
+    private int _ply;
     private int _done, _total;
     private CancellationTokenSource? _cancellation;
 
@@ -151,11 +172,54 @@
         finally
         {
             _busy = false;
+
+            // Open on the worst moment rather than the starting position — it is what the
+            // reader came for, and the navigation is right there to walk back from it.
+            GoToPly(_review?.Notable.FirstOrDefault()?.Ply ?? 0);
+
             StateHasChanged();
         }
     }
 
-    private void Select(int ply) => _selected = _review?.Moves.FirstOrDefault(m => m.Ply == ply);
+    private IReadOnlyList<BoardSquare> BoardSquares
+    {
+        get
+        {
+            if (_board is null || _game is null) return [];
+            PlayedMove? last = _ply > 0 ? _game.Moves[_ply - 1] : null;
+            return BoardView.Squares(_board, _side == ChessPieceColor.White,
+                last?.FromIndex ?? -1, last?.ToIndex ?? -1);
+        }
+    }
+
+    private string CurrentFen => _board?.FEN ?? ChessGameSession.StartingFen;
+
+    private string PositionLabel => _game is null
+        ? string.Empty
+        : _ply == 0 ? "before the first move" : $"move {_ply} of {_game.Moves.Count}";
+
+    private void Select(int ply) => GoToPly(ply);
+
+    /// <summary>
+    /// Replays from the start each time. A game is a few hundred plies at most, so the simple
+    /// version is fast enough and cannot drift out of step the way incremental undo could.
+    /// </summary>
+    private void GoToPly(int ply)
+    {
+        if (_game is null) return;
+
+        _ply = Math.Clamp(ply, 0, _game.Moves.Count);
+
+        var engine = new Engine(_game.StartFen);
+        engine.GenerateValidMoves();
+        for (int i = 0; i < _ply; i++)
+        {
+            if (!PuzzleData.TryApplyUci(engine, _game.Moves[i].Uci)) break;
+        }
+
+        _board = engine;
+        _selected = _review?.Moves.FirstOrDefault(m => m.Ply == _ply);
+    }
 
     public void Dispose()
     {

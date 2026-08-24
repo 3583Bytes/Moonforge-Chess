@@ -757,6 +757,27 @@ namespace ChessEngine.Engine // Reverted to original namespace
         {
             Piece piece = ChessBoard.Squares[srcPosition].Piece;
 
+            // The move has to be one the generator actually produced for this piece, by the
+            // side whose turn it is. Without these gates the method applied whatever it was
+            // handed and still returned true, so a bishop could pass through its own pawn and
+            // callers — the UCI `position ... moves` list, PGN import, anything holding the
+            // library — had no way to tell. The self-check unwind below catches only moves
+            // that expose your own king, not moves the piece cannot make at all.
+            if (piece == null)
+            {
+                return false;
+            }
+
+            if (piece.PieceColor != WhoseMove)
+            {
+                return false;
+            }
+
+            if (!piece.ValidMoves.Contains(dstPosition))
+            {
+                return false;
+            }
+
             PreviousChessBoard = new Board(ChessBoard);
             UndoChessBoard = new Board(ChessBoard);
             UndoGameBook = new List<OpeningMove>(CurrentGameBook);
