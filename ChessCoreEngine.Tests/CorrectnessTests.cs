@@ -26,7 +26,7 @@ namespace ChessCoreEngine.Tests
 		{
 			var board = new Board();
 			var fen = Board.Fen(false, board);
-			ClassicAssert.AreEqual("8/8/8/8/8/8/8/8 w - - 0 0", fen);
+			Assert.That(fen, Is.EqualTo("8/8/8/8/8/8/8/8 w - - 0 0"));
 		}
 
 		[Test]
@@ -35,7 +35,7 @@ namespace ChessCoreEngine.Tests
 			var standardFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - -";
 			var board = new Board(standardFen);
 			var fen = Board.Fen(true, board);
-			ClassicAssert.AreEqual(standardFen, fen);
+			Assert.That(fen, Is.EqualTo(standardFen));
 		}
 
 		[Test]
@@ -44,7 +44,7 @@ namespace ChessCoreEngine.Tests
 			var standardFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 			var board = new Board(standardFen);
 			var fen = Board.Fen(false, board);
-			ClassicAssert.AreEqual(standardFen, fen);
+			Assert.That(fen, Is.EqualTo(standardFen));
 		}
 		
 		[Test]
@@ -58,20 +58,20 @@ namespace ChessCoreEngine.Tests
 
 			// is the board oriented the way we expect?
 			var piece = board.Squares[0].Piece;
-			ClassicAssert.AreEqual(ChessPieceColor.Black, piece.PieceColor);
-			ClassicAssert.AreEqual(ChessPieceType.Rook, piece.PieceType);
+			Assert.That(piece.PieceColor, Is.EqualTo(ChessPieceColor.Black));
+			Assert.That(piece.PieceType, Is.EqualTo(ChessPieceType.Rook));
 
 			piece = board.Squares[3].Piece;
-			ClassicAssert.AreEqual(ChessPieceColor.Black, piece.PieceColor);
-			ClassicAssert.AreEqual(ChessPieceType.Queen, piece.PieceType);
+			Assert.That(piece.PieceColor, Is.EqualTo(ChessPieceColor.Black));
+			Assert.That(piece.PieceType, Is.EqualTo(ChessPieceType.Queen));
 
 			piece = board.Squares[63].Piece;
-			ClassicAssert.AreEqual(ChessPieceColor.White, piece.PieceColor);
-			ClassicAssert.AreEqual(ChessPieceType.Rook, piece.PieceType);
+			Assert.That(piece.PieceColor, Is.EqualTo(ChessPieceColor.White));
+			Assert.That(piece.PieceType, Is.EqualTo(ChessPieceType.Rook));
 
 			piece = board.Squares[59].Piece;
-			ClassicAssert.AreEqual(ChessPieceColor.White, piece.PieceColor);
-			ClassicAssert.AreEqual(ChessPieceType.Queen, piece.PieceType);
+			Assert.That(piece.PieceColor, Is.EqualTo(ChessPieceColor.White));
+			Assert.That(piece.PieceType, Is.EqualTo(ChessPieceType.Queen));
 		}
 		
 		[Test]
@@ -83,16 +83,16 @@ namespace ChessCoreEngine.Tests
 			ClassicAssert.IsFalse(MoveContent.ParseAN("abc", ref sourceColumn, ref sourceRow, ref destinationColumn, ref destinationRow));
 
 			ClassicAssert.IsTrue(MoveContent.ParseAN("a8h1", ref sourceColumn, ref sourceRow, ref destinationColumn, ref destinationRow));
-			ClassicAssert.AreEqual(sourceColumn, 0);
-			ClassicAssert.AreEqual(sourceRow, 0);
-			ClassicAssert.AreEqual(destinationColumn, 7);
-			ClassicAssert.AreEqual(destinationRow, 7);
+			Assert.That(sourceColumn, Is.EqualTo(0));
+			Assert.That(sourceRow, Is.EqualTo(0));
+			Assert.That(destinationColumn, Is.EqualTo(7));
+			Assert.That(destinationRow, Is.EqualTo(7));
 
 			ClassicAssert.IsTrue(MoveContent.ParseAN("b3e4", ref sourceColumn, ref sourceRow, ref destinationColumn, ref destinationRow));
-			ClassicAssert.AreEqual(sourceColumn, 1);
-			ClassicAssert.AreEqual(sourceRow, 5);
-			ClassicAssert.AreEqual(destinationColumn, 4);
-			ClassicAssert.AreEqual(destinationRow, 4);
+			Assert.That(sourceColumn, Is.EqualTo(1));
+			Assert.That(sourceRow, Is.EqualTo(5));
+			Assert.That(destinationColumn, Is.EqualTo(4));
+			Assert.That(destinationRow, Is.EqualTo(4));
 		}
 
 		[Test]
@@ -138,13 +138,13 @@ namespace ChessCoreEngine.Tests
 			var engine = new Engine(standardFen);
 			
 			engine.MovePieceAN("e2e4");
-			ClassicAssert.AreEqual("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1", engine.FEN);
+			Assert.That(engine.FEN, Is.EqualTo("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"));
 
 			engine.MovePieceAN("c7c5");
-			ClassicAssert.AreEqual("rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2", engine.FEN);
+			Assert.That(engine.FEN, Is.EqualTo("rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2"));
 
 			engine.MovePieceAN("g1f3");
-			ClassicAssert.AreEqual("rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2", engine.FEN);
+			Assert.That(engine.FEN, Is.EqualTo("rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2"));
 		}
 
 		[Test]
@@ -390,7 +390,7 @@ namespace ChessCoreEngine.Tests
 			var index=0;
 			foreach (var move in movelist) {
 				engine.MovePieceAN(move);
-				ClassicAssert.AreEqual(fenlist[index], engine.FEN);
+				Assert.That(engine.FEN, Is.EqualTo(fenlist[index]));
 				index++;
 			}
 		}
@@ -405,7 +405,7 @@ namespace ChessCoreEngine.Tests
 			MoveContent lastMove = engine.GetMoveHistory().ToArray()[0];
 			string move = lastMove.GetPureCoordinateNotation();
 			// did the AI find the checkmate?
-			ClassicAssert.AreEqual("g6g8", move);
+			Assert.That(move, Is.EqualTo("g6g8"));
 		}
 	}
 }

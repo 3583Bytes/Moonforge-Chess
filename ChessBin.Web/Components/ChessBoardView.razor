@@ -1,0 +1,75 @@
+@*
+    The 8x8 board, shared by the game and the puzzle. Both pages rendered this markup
+    independently until they drifted, so everything that varies between them is a
+    parameter and everything else lives here once.
+*@
+
+<div class="chessboard @ExtraClass" role="grid" aria-label="@Label">
+    @foreach (BoardSquare square in Squares)
+    {
+        <button class="@SquareClass(square)"
+                type="button"
+                role="gridcell"
+                aria-label="@SquareAriaLabel(square)"
+                disabled="@(!Interactive)"
+                @onclick="() => OnSquareClick.InvokeAsync(square)">
+            @if (ShowCoordinates && ShowFileLabel(square))
+            {
+                <span class="coordinate file">@((char)('a' + square.Column))</span>
+            }
+            @if (ShowCoordinates && ShowRankLabel(square))
+            {
+                <span class="coordinate rank">@(8 - square.Row)</span>
+            }
+            @if (square.IsLegalTarget)
+            {
+                <span class="move-target @(square.IsOccupied ? "capture" : "")" aria-hidden="true"></span>
+            }
+            @if (square.IsOccupied)
+            {
+                <span class="piece @PieceColorClass(square)" aria-hidden="true">@Pieces.Glyph(square)</span>
+            }
+        </button>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<BoardSquare> Squares { get; set; } = [];
+
+    /// <summary>Which way the board is turned; decides where the rank and file labels sit.</summary>
+    [Parameter] public bool WhiteAtBottom { get; set; } = true;
+
+    /// <summary>False disables every square, e.g. while the engine thinks or after a puzzle ends.</summary>
+    [Parameter] public bool Interactive { get; set; }
+
+    [Parameter] public bool ShowCoordinates { get; set; } = true;
+
+    [Parameter] public string Label { get; set; } = "Chess board";
+
+    /// <summary>Extra class on the grid, e.g. "is-thinking".</summary>
+    [Parameter] public string? ExtraClass { get; set; }
+
+    [Parameter] public EventCallback<BoardSquare> OnSquareClick { get; set; }
+
+    private bool ShowFileLabel(BoardSquare square) => WhiteAtBottom ? square.Row == 7 : square.Row == 0;
+
+    private bool ShowRankLabel(BoardSquare square) => WhiteAtBottom ? square.Column == 0 : square.Column == 7;
+
+    private static string SquareClass(BoardSquare square)
+    {
+        var classes = new List<string> { "square", square.IsDark ? "dark" : "light" };
+        if (square.IsSelected) classes.Add("selected");
+        if (square.IsLastMove) classes.Add("last-move");
+        return string.Join(' ', classes);
+    }
+
+    private static string PieceColorClass(BoardSquare square) =>
+        square.PieceColor == ChessPieceColor.White ? "white-piece" : "black-piece";
+
+    private static string SquareAriaLabel(BoardSquare square)
+    {
+        if (!square.IsOccupied)
+            return square.IsLegalTarget ? $"{square.Coordinate}, legal destination" : $"{square.Coordinate}, empty";
+        return $"{square.Coordinate}, {square.PieceColor} {square.PieceType}{(square.IsLegalTarget ? ", legal capture" : string.Empty)}";
+    }
+}

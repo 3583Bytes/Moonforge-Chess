@@ -56,34 +56,11 @@
                 </div>
 
                 <div class="board-wrap">
-                    <div class="chessboard" role="grid" aria-label="Puzzle position">
-                        @foreach (BoardSquare square in _session.GetDisplaySquares())
-                        {
-                            <button class="@SquareClass(square)"
-                                    type="button"
-                                    role="gridcell"
-                                    aria-label="@SquareAriaLabel(square)"
-                                    disabled="@(!_session.IsSolverTurn)"
-                                    @onclick="() => _session.ClickSquareAsync(square.Column, square.Row)">
-                                @if (ShowFileLabel(square))
-                                {
-                                    <span class="coordinate file">@((char)('a' + square.Column))</span>
-                                }
-                                @if (ShowRankLabel(square))
-                                {
-                                    <span class="coordinate rank">@(8 - square.Row)</span>
-                                }
-                                @if (square.IsLegalTarget)
-                                {
-                                    <span class="move-target @(square.IsOccupied ? "capture" : "")" aria-hidden="true"></span>
-                                }
-                                @if (square.IsOccupied)
-                                {
-                                    <span class="piece @PieceColorClass(square)" aria-hidden="true">@PieceGlyph(square)</span>
-                                }
-                            </button>
-                        }
-                    </div>
+                    <ChessBoardView Squares="_session.GetDisplaySquares()"
+                                    WhiteAtBottom="_session.WhiteAtBottom"
+                                    Interactive="_session.IsSolverTurn"
+                                    Label="Puzzle position"
+                                    OnSquareClick="OnSquareClickAsync" />
                 </div>
 
                 <div class="player-strip">
@@ -471,41 +448,10 @@
         return "pip-todo";
     }
 
-    private bool ShowFileLabel(BoardSquare square) => _session.WhiteAtBottom ? square.Row == 7 : square.Row == 0;
-    private bool ShowRankLabel(BoardSquare square) => _session.WhiteAtBottom ? square.Column == 0 : square.Column == 7;
 
-    private static string SquareClass(BoardSquare square)
-    {
-        var classes = new List<string> { "square", square.IsDark ? "dark" : "light" };
-        if (square.IsSelected) classes.Add("selected");
-        if (square.IsLastMove) classes.Add("last-move");
-        return string.Join(' ', classes);
-    }
 
-    private static string PieceColorClass(BoardSquare square) => square.PieceColor == ChessPieceColor.White ? "white-piece" : "black-piece";
 
-    private static string SquareAriaLabel(BoardSquare square)
-    {
-        if (!square.IsOccupied) return square.IsLegalTarget ? $"{square.Coordinate}, legal destination" : $"{square.Coordinate}, empty";
-        return $"{square.Coordinate}, {square.PieceColor} {square.PieceType}{(square.IsLegalTarget ? ", legal capture" : string.Empty)}";
-    }
 
-    private static string PieceGlyph(BoardSquare square) => (square.PieceType, square.PieceColor) switch
-    {
-        (ChessPieceType.King, ChessPieceColor.White) => "♔",
-        (ChessPieceType.Queen, ChessPieceColor.White) => "♕",
-        (ChessPieceType.Rook, ChessPieceColor.White) => "♖",
-        (ChessPieceType.Bishop, ChessPieceColor.White) => "♗",
-        (ChessPieceType.Knight, ChessPieceColor.White) => "♘",
-        (ChessPieceType.Pawn, ChessPieceColor.White) => "♙",
-        (ChessPieceType.King, ChessPieceColor.Black) => "♚",
-        (ChessPieceType.Queen, ChessPieceColor.Black) => "♛",
-        (ChessPieceType.Rook, ChessPieceColor.Black) => "♜",
-        (ChessPieceType.Bishop, ChessPieceColor.Black) => "♝",
-        (ChessPieceType.Knight, ChessPieceColor.Black) => "♞",
-        (ChessPieceType.Pawn, ChessPieceColor.Black) => "♟",
-        _ => string.Empty
-    };
 
     private static string FormatSwing(int centipawns) => centipawns switch
     {
@@ -527,6 +473,8 @@
         }
         return sb.ToString();
     }
+
+    private Task OnSquareClickAsync(BoardSquare square) => _session.ClickSquareAsync(square.Column, square.Row);
 
     public void Dispose() => _session.StateChanged -= OnSessionChanged;
 

@@ -32,34 +32,13 @@
             </div>
 
             <div class="board-wrap">
-                <div class="chessboard @( _session.IsThinking ? "is-thinking" : "")" role="grid" aria-label="Chess board">
-                    @foreach (BoardSquare square in _session.GetDisplaySquares())
-                    {
-                        <button class="@SquareClass(square)"
-                                type="button"
-                                role="gridcell"
-                                aria-label="@SquareAriaLabel(square)"
-                                disabled="@(!_session.IsHumanTurn || _session.HasPendingPromotion)"
-                                @onclick="() => HandleSquareAsync(square)">
-                            @if (_showCoordinates && ShowFileLabel(square))
-                            {
-                                <span class="coordinate file">@((char)('a' + square.Column))</span>
-                            }
-                            @if (_showCoordinates && ShowRankLabel(square))
-                            {
-                                <span class="coordinate rank">@(8 - square.Row)</span>
-                            }
-                            @if (square.IsLegalTarget)
-                            {
-                                <span class="move-target @(square.IsOccupied ? "capture" : "")" aria-hidden="true"></span>
-                            }
-                            @if (square.IsOccupied)
-                            {
-                                <span class="piece @PieceColorClass(square)" aria-hidden="true">@PieceGlyph(square)</span>
-                            }
-                        </button>
-                    }
-                </div>
+                <ChessBoardView Squares="_session.GetDisplaySquares()"
+                                WhiteAtBottom="_session.WhiteAtBottom"
+                                Interactive="@(_session.IsHumanTurn && !_session.HasPendingPromotion)"
+                                ShowCoordinates="_showCoordinates"
+                                Label="Chess board"
+                                ExtraClass="@(_session.IsThinking ? "is-thinking" : null)"
+                                OnSquareClick="HandleSquareAsync" />
 
                 @if (_session.HasPendingPromotion)
                 {
@@ -68,7 +47,7 @@
                         <div class="promotion-pieces">
                             @foreach (ChessPieceType type in PromotionPieces)
                             {
-                                <button type="button" aria-label="Promote to @type" @onclick="() => PromoteAsync(type)">@PieceGlyph(type, _session.HumanColor)</button>
+                                <button type="button" aria-label="Promote to @type" @onclick="() => PromoteAsync(type)">@Pieces.Glyph(type, _session.HumanColor)</button>
                             }
                         </div>
                         <button class="text-button" type="button" @onclick="CancelPromotion">Cancel</button>
@@ -441,43 +420,11 @@
     private static string ClockLabel(long milliseconds) => milliseconds <= 0 ? "∞" : TimeSpan.FromMilliseconds(milliseconds).ToString(@"m\:ss");
     private static string ClockDuration(long milliseconds) => milliseconds <= 0 ? "PT0S" : $"PT{Math.Ceiling(milliseconds / 1000d)}S";
 
-    private bool ShowFileLabel(BoardSquare square) => _session.WhiteAtBottom ? square.Row == 7 : square.Row == 0;
-    private bool ShowRankLabel(BoardSquare square) => _session.WhiteAtBottom ? square.Column == 0 : square.Column == 7;
 
-    private static string SquareClass(BoardSquare square)
-    {
-        var classes = new List<string> { "square", square.IsDark ? "dark" : "light" };
-        if (square.IsSelected) classes.Add("selected");
-        if (square.IsLastMove) classes.Add("last-move");
-        return string.Join(' ', classes);
-    }
 
-    private static string PieceColorClass(BoardSquare square) => square.PieceColor == ChessPieceColor.White ? "white-piece" : "black-piece";
 
-    private static string SquareAriaLabel(BoardSquare square)
-    {
-        if (!square.IsOccupied) return square.IsLegalTarget ? $"{square.Coordinate}, legal destination" : $"{square.Coordinate}, empty";
-        return $"{square.Coordinate}, {square.PieceColor} {square.PieceType}{(square.IsLegalTarget ? ", legal capture" : string.Empty)}";
-    }
 
-    private static string PieceGlyph(BoardSquare square) => PieceGlyph(square.PieceType, square.PieceColor ?? ChessPieceColor.White);
 
-    private static string PieceGlyph(ChessPieceType type, ChessPieceColor color) => (type, color) switch
-    {
-        (ChessPieceType.King, ChessPieceColor.White) => "♔",
-        (ChessPieceType.Queen, ChessPieceColor.White) => "♕",
-        (ChessPieceType.Rook, ChessPieceColor.White) => "♖",
-        (ChessPieceType.Bishop, ChessPieceColor.White) => "♗",
-        (ChessPieceType.Knight, ChessPieceColor.White) => "♘",
-        (ChessPieceType.Pawn, ChessPieceColor.White) => "♙",
-        (ChessPieceType.King, ChessPieceColor.Black) => "♚",
-        (ChessPieceType.Queen, ChessPieceColor.Black) => "♛",
-        (ChessPieceType.Rook, ChessPieceColor.Black) => "♜",
-        (ChessPieceType.Bishop, ChessPieceColor.Black) => "♝",
-        (ChessPieceType.Knight, ChessPieceColor.Black) => "♞",
-        (ChessPieceType.Pawn, ChessPieceColor.Black) => "♟",
-        _ => string.Empty
-    };
 
     private static string FormatCentipawns(int score) => score switch
     {

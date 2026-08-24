@@ -198,7 +198,9 @@ public class EvalEquivalenceTests
                 sb.AppendLine($"  sq{i}: bitboard={(pa == null ? "empty" : pa.PieceType.ToString())} legacy={(pb == null ? "empty" : pb.PieceType.ToString())}");
                 continue;
             }
-            if (pa == null) continue;
+            // Line above guarantees both are null or neither is; say so, so the
+            // compiler can see pb is non-null too.
+            if (pa == null || pb == null) continue;
             if (pa.PieceType != pb.PieceType || pa.PieceColor != pb.PieceColor)
                 sb.AppendLine($"  sq{i} piece: bitboard={pa.PieceColor} {pa.PieceType} legacy={pb.PieceColor} {pb.PieceType}");
             if (pa.Moved != pb.Moved)
