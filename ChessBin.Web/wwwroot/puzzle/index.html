@@ -2,22 +2,19 @@
 <html lang="en">
 
 <!--
-    Boot page for /puzzle. GitHub Pages serves this as the directory index, which does two
-    things the SPA can't: social scrapers get puzzle-specific tags (they never run the
-    WebAssembly app, so meta set at runtime is invisible to them), and /puzzle stops
-    depending on the 404.html path-restore.
-
-    Shared behaviour lives in js/chessbin.js so this file and index.html can't drift.
-    Anything changed in the <head> below should be considered against index.html too.
+    Boot page for /puzzle. GitHub Pages serves this as the directory index, which gives
+    the route a real 200 response, its own title and social card, and crawlable content —
+    none of which the WebAssembly app can provide, since crawlers never execute it.
 -->
 
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="A new chess puzzle every day, the same one for everyone. Solve it in your browser, then see exactly how Moonforge scores the position." />
+    <meta name="description" content="A new chess puzzle every day, free and the same for everyone. Solve it in your browser, then see exactly how the engine scores the position." />
     <meta name="theme-color" content="#0d0f13" />
-    <title>Daily puzzle · ChessBin</title>
+    <title>Daily Chess Puzzle — A New One Every Day | ChessBin</title>
     <base href="/" />
+    <link rel="canonical" href="https://chessbin.com/puzzle/" />
     <link rel="preload" id="webassembly" />
     <link rel="stylesheet" href="css/app.css" />
     <link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48" />
@@ -25,31 +22,76 @@
     <link rel="manifest" href="site.webmanifest" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="ChessBin" />
-    <meta property="og:title" content="ChessBin · Daily puzzle" />
-    <meta property="og:description" content="A new chess puzzle every day, the same one for everyone. Solve it in your browser, then see exactly how Moonforge scores the position." />
-    <meta property="og:url" content="https://chessbin.com/puzzle" />
+    <meta property="og:title" content="ChessBin · Daily chess puzzle" />
+    <meta property="og:description" content="A new chess puzzle every day, free and the same for everyone. Solve it in your browser, then see exactly how the engine scores the position." />
+    <meta property="og:url" content="https://chessbin.com/puzzle/" />
     <meta property="og:image" content="https://chessbin.com/brand/og-puzzle.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="The ChessBin mark above a chessboard, for the daily puzzle." />
+    <meta property="og:image:alt" content="The ChessBin mark above a rank of chessboard squares." />
     <meta name="twitter:card" content="summary_large_image" />
     <link href="ChessBin.Web.styles.css" rel="stylesheet" />
     <script type="importmap"></script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "ChessBin Daily Chess Puzzle",
+      "url": "https://chessbin.com/puzzle/",
+      "applicationCategory": "GameApplication",
+      "operatingSystem": "Any modern web browser",
+      "isAccessibleForFree": true,
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "description": "A new chess puzzle every day, the same one for everyone, solved in your browser."
+    }
+    </script>
 </head>
 
 <body>
     <div id="app">
-        <svg class="loading-progress">
-            <circle r="40%" cx="50%" cy="50%" />
-            <circle r="40%" cx="50%" cy="50%" />
-        </svg>
-        <div class="loading-progress-text"></div>
-    </div>
+        <main class="site-shell">
+            <header class="masthead">
+            <a class="brand" href="/" aria-label="ChessBin home">
+                <span class="brand-mark" aria-hidden="true">
+                    <img src="brand/chessbin-mark-72.png" width="72" height="59" alt="" />
+                </span>
+                <span>ChessBin</span>
+            </a>
+                <nav class="site-nav" aria-label="Sections">
+                <a href="/">Play</a>
+                <a href="/puzzle/" class="active">Daily puzzle</a>
+                <a href="/puzzle/practice/">Practice</a>
+                </nav>
+            </header>
 
+            <section class="hero">
+                <div>
+                    <p class="eyebrow">A new puzzle every day</p>
+                    <h1>Today's chess puzzle.</h1>
+                </div>
+                <p class="intro">One position a day, the same for everyone, taken from real games. No account — your streak lives in this browser.</p>
+            </section>
+
+            <p class="boot-note">Find the winning line, then see exactly how the engine scores the position — which is the part other puzzle sites leave out. Solve it without a wrong move to keep your streak.</p>
+
+            <nav class="boot-links" aria-label="Go to">
+            <a href="/puzzle/practice/">Practice more puzzles</a>
+            <a href="/">Play a full game</a>
+            </nav>
+
+            <div class="boot-status" role="status">
+                <svg class="loading-progress" viewBox="0 0 34 34" aria-hidden="true">
+                    <circle r="13" cx="17" cy="17" />
+                    <circle r="13" cx="17" cy="17" />
+                </svg>
+                <span class="loading-progress-text"></span>
+            </div>
+        </main>
+    </div>
     <div id="blazor-error-ui">
         ChessBin hit an unexpected error.
         <a href="." class="reload">Reload</a>
-        <span class="dismiss">🗙</span>
+        <span class="dismiss">&#128473;</span>
     </div>
     <script src="js/chessbin.js"></script>
     <script src="_framework/blazor.webassembly#[.{fingerprint}].js"></script>

@@ -2,21 +2,19 @@
 <html lang="en">
 
 <!--
-    The markup inside #app is deliberately real content, not a spinner: it is the only
-    thing search engines can read (they do not run WebAssembly) and it is what a visitor
-    looks at while the runtime downloads. Blazor replaces it once the app renders.
-    Shared behaviour lives in js/chessbin.js so this file and the other boot pages
-    cannot drift apart.
+    Boot page for /puzzle/practice. Without it the route fell through to 404.html, which
+    works in a browser but answers 404 to crawlers, link previews and anything that cannot
+    run JavaScript.
 -->
 
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Play free chess against a real engine in your browser — no signup, nothing to install. Watch its evaluation and best line update as you play." />
+    <meta name="description" content="Practise chess tactics with unlimited puzzles by difficulty, free and in your browser. See the engine's evaluation after every solve." />
     <meta name="theme-color" content="#0d0f13" />
-    <title>Play Chess vs the Computer, See How It Thinks | ChessBin</title>
+    <title>Chess Tactics Practice — Unlimited Puzzles | ChessBin</title>
     <base href="/" />
-    <link rel="canonical" href="https://chessbin.com/" />
+    <link rel="canonical" href="https://chessbin.com/puzzle/practice/" />
     <link rel="preload" id="webassembly" />
     <link rel="stylesheet" href="css/app.css" />
     <link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48" />
@@ -24,13 +22,13 @@
     <link rel="manifest" href="site.webmanifest" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="ChessBin" />
-    <meta property="og:title" content="ChessBin · Play chess against a real engine" />
-    <meta property="og:description" content="Play free chess against a real engine in your browser — no signup, nothing to install. Watch its evaluation and best line update as you play." />
-    <meta property="og:url" content="https://chessbin.com/" />
-    <meta property="og:image" content="https://chessbin.com/brand/og-image.png" />
+    <meta property="og:title" content="ChessBin · Chess tactics practice" />
+    <meta property="og:description" content="Practise chess tactics with unlimited puzzles by difficulty, free and in your browser. See the engine's evaluation after every solve." />
+    <meta property="og:url" content="https://chessbin.com/puzzle/practice/" />
+    <meta property="og:image" content="https://chessbin.com/brand/og-puzzle.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="The ChessBin mark: a black knight and gold pawns against a blue triangle." />
+    <meta property="og:image:alt" content="The ChessBin mark above a rank of chessboard squares." />
     <meta name="twitter:card" content="summary_large_image" />
     <link href="ChessBin.Web.styles.css" rel="stylesheet" />
     <script type="importmap"></script>
@@ -38,14 +36,13 @@
     {
       "@context": "https://schema.org",
       "@type": "WebApplication",
-      "name": "ChessBin",
-      "url": "https://chessbin.com/",
+      "name": "ChessBin Chess Puzzle Practice",
+      "url": "https://chessbin.com/puzzle/practice/",
       "applicationCategory": "GameApplication",
       "operatingSystem": "Any modern web browser",
-      "browserRequirements": "Requires WebAssembly",
       "isAccessibleForFree": true,
       "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-      "description": "Play free chess against a real engine in your browser and watch its evaluation as you play."
+      "description": "Unlimited chess tactics puzzles by difficulty, solved in your browser."
     }
     </script>
 </head>
@@ -61,25 +58,25 @@
                 <span>ChessBin</span>
             </a>
                 <nav class="site-nav" aria-label="Sections">
-                <a href="/" class="active">Play</a>
+                <a href="/">Play</a>
                 <a href="/puzzle/">Daily puzzle</a>
-                <a href="/puzzle/practice/">Practice</a>
+                <a href="/puzzle/practice/" class="active">Practice</a>
                 </nav>
             </header>
 
             <section class="hero">
                 <div>
-                    <p class="eyebrow">Free · no signup · runs in your browser</p>
-                    <h1>Play chess against a real engine.</h1>
+                    <p class="eyebrow">As many as you want</p>
+                    <h1>Chess tactics practice.</h1>
                 </div>
-                <p class="intro">A handcrafted chess engine running entirely in your browser. No account, no server, just you and the machine.</p>
+                <p class="intro">Puzzles from the same set as the daily, as many as you like, filtered by difficulty. Nothing here touches your daily streak.</p>
             </section>
 
-            <p class="boot-note">Everything runs on your device — the engine, the analysis and the puzzle checking. There is no account to create and no game data leaves your browser. Choose a colour, pick a strength from quick to forge, and the Engine Room shows the evaluation and the line it expects while you play.</p>
+            <p class="boot-note">Pick easy, medium or hard and keep going. Each solve shows the engine's read on what changed, so you can see why the line works rather than just being told it does.</p>
 
             <nav class="boot-links" aria-label="Go to">
-            <a href="/puzzle/">Today's chess puzzle</a>
-            <a href="/puzzle/practice/">Practice puzzles</a>
+            <a href="/puzzle/">Today's puzzle</a>
+            <a href="/">Play a full game</a>
             </nav>
 
             <div class="boot-status" role="status">

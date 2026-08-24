@@ -204,11 +204,22 @@ summary { cursor: pointer; }
 
 #blazor-error-ui { display: none; position: fixed; z-index: 1000; right: 20px; bottom: 20px; padding: 14px 40px 14px 16px; color: #fff; background: #7c3028; box-shadow: 0 8px 30px #000; }
 #blazor-error-ui .dismiss { position: absolute; right: 12px; cursor: pointer; }
-.loading-progress { position: absolute; width: 80px; height: 80px; inset: 30vh 0 auto; margin: auto; }
-.loading-progress circle { fill: none; stroke: #383d44; stroke-width: 6px; transform-origin: 50% 50%; transform: rotate(-90deg); }
+/* ── Pre-boot view ────────────────────────────────────────────────────────
+   The markup inside #app is what a crawler reads and what a visitor looks at
+   during the WebAssembly download; Blazor replaces it once it renders. It reuses
+   the real masthead and hero classes so the page doesn't visibly change shape.
+   The loading indicator therefore sits inline under that content rather than
+   floating at 30vh, where it used to overlap anything placed above it. */
+.boot-status { display: flex; align-items: center; gap: 14px; padding: 26px 0 60px; }
+.loading-progress { flex: none; width: 34px; height: 34px; }
+.loading-progress circle { fill: none; stroke: #383d44; stroke-width: 8px; transform-origin: 50% 50%; transform: rotate(-90deg); }
 .loading-progress circle:last-child { stroke: var(--cyan); stroke-dasharray: calc(3.141 * var(--blazor-load-percentage, 0%) * .8), 500%; transition: stroke-dasharray .05s; }
-.loading-progress-text { position: absolute; width: 100%; top: calc(30vh + 98px); text-align: center; color: #777c82; font: 600 10px/1 ui-monospace, monospace; letter-spacing: .1em; text-transform: uppercase; }
-.loading-progress-text::after { content: var(--blazor-load-percentage-text, "Forging engine"); }
+.loading-progress-text { color: #777c82; font: 600 10px/1 ui-monospace, monospace; letter-spacing: .1em; text-transform: uppercase; }
+.loading-progress-text::after { content: var(--blazor-load-percentage-text, "Loading the engine"); }
+.boot-note { max-width: 60ch; margin: 0; color: var(--muted); font: 400 15px/1.7 Georgia, serif; }
+.boot-links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
+.boot-links a { padding: 11px 16px; color: var(--ink); border: 1px solid var(--line); background: var(--surface); text-decoration: none; font: 600 11px/1 ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; }
+.boot-links a:hover { color: var(--gold-bright); border-color: var(--gold-line); }
 
 /* ── Daily puzzle ─────────────────────────────────────────────────────────── */
 /* The 680px floor is sized for the game panel's contents; the puzzle panel is

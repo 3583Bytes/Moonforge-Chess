@@ -1,0 +1,10 @@
+# ChessBin — https://chessbin.com
+User-agent: *
+Allow: /
+
+# Share links carry a position in the query string and serve the same page as the
+# root, so they are excluded to stop them being crawled as separate URLs. The
+# canonical tag on / covers anything that slips through.
+Disallow: /?fen=
+
+Sitemap: https://chessbin.com/sitemap.xml
