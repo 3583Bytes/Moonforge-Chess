@@ -9,6 +9,11 @@
          renders "24 August 2026" under the invariant culture. Dropping ICU removes the
          globalization shard every visitor would otherwise download. -->
     <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- GitHub Pages ignores published .br/.gz files and gzips the raw asset on the fly,
+         so generating them adds ~5.5 MB of never-read files to every deploy. Set this
+         back to true if the site ever moves behind a CDN that serves them (Cloudflare
+         would, and brotli beats Pages' gzip by roughly 200 KB on the runtime alone). -->
+    <CompressionEnabled>false</CompressionEnabled>
     <AssemblyName>ChessBin.Web</AssemblyName>
     <RootNamespace>ChessBin.Web</RootNamespace>
   </PropertyGroup>
