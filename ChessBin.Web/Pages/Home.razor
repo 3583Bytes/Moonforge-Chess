@@ -167,6 +167,52 @@
                 </details>
             </section>
 
+            @if (_session.IsGameOver)
+            {
+                <section class="panel-section">
+                    <div class="section-heading">
+                        <h2>Game review</h2>
+                        <span>@(HasReview ? ReviewTally : "Moonforge's read")</span>
+                    </div>
+
+                    @if (_reviewing)
+                    {
+                        <div class="eval-track" aria-hidden="true"><span style="width: @ReviewPercent%"></span></div>
+                        <p class="position-message">Checking position @_reviewDone of @_reviewTotal…</p>
+                    }
+                    else if (!HasReview)
+                    {
+                        <p class="position-message">See what every move cost — and why, in the engine's own terms.</p>
+                        <button class="primary-button" type="button" @onclick="ReviewGameAsync">Review this game</button>
+                    }
+                    else if (_review!.Notable.Count == 0)
+                    {
+                        <p class="position-message">Nothing stood out — no move of yours cost more than @(GameReviewer.InaccuracyLoss / 100d) of a pawn.</p>
+                    }
+                    else
+                    {
+                        <EvalGraph Review="_review" OnSelectPly="JumpToPly" />
+
+                        <ol class="review-list">
+                            @foreach (ReviewedMove m in _review.Notable)
+                            {
+                                <li>
+                                    <button class="review-jump" type="button" @onclick="() => JumpToPly(m.Ply)"
+                                            title="Show this position on the board">
+                                        <span class="review-head">
+                                            <strong>@m.Reference</strong>
+                                            <span class="verdict v-@m.Verdict.ToString().ToLowerInvariant()">@m.Verdict</span>
+                                            <span class="review-cost">@FormatCost(m.Loss)</span>
+                                        </span>
+                                        <span class="review-why">@m.Explanation</span>
+                                    </button>
+                                </li>
+                            }
+                        </ol>
+                    }
+                </section>
+            }
+
             <section class="panel-section position-section">
                 <div class="section-heading"><h2>Position</h2><span>FEN / PGN</span></div>
                 <input class="fen-input" @bind="_fenInput" aria-label="FEN position" placeholder="Paste a FEN position" />
@@ -262,6 +308,10 @@
     private bool _soundEnabled;
     private bool _lightBoard;
     private System.Threading.Timer? _clockTimer;
+    private GameReviewResult? _review;
+    private bool _reviewing;
+    private int _reviewDone, _reviewTotal, _reviewedAtPly = -1;
+    private CancellationTokenSource? _reviewCancellation;
     private bool _initialized;
 
     [Inject] private IJSRuntime Js { get; set; } = null!;
@@ -416,6 +466,72 @@
         _ => TimeControl.Unlimited
     };
 
+
+    /// <summary>A review belongs to the exact position it was run on; undo or a new game drops it.</summary>
+    private bool HasReview => _review is not null && _reviewedAtPly == _session.Moves.Count;
+
+    private double ReviewPercent => _reviewTotal == 0 ? 0 : Math.Clamp(_reviewDone * 100d / _reviewTotal, 2, 100);
+
+    private string ReviewTally
+    {
+        get
+        {
+            if (_review is null) return string.Empty;
+            var parts = new List<string>();
+            int blunders = _review.Count(MoveVerdict.Blunder);
+            int mistakes = _review.Count(MoveVerdict.Mistake);
+            int inaccuracies = _review.Count(MoveVerdict.Inaccuracy);
+            if (blunders > 0) parts.Add($"{blunders} blunder{(blunders == 1 ? "" : "s")}");
+            if (mistakes > 0) parts.Add($"{mistakes} mistake{(mistakes == 1 ? "" : "s")}");
+            if (inaccuracies > 0) parts.Add($"{inaccuracies} inaccurac{(inaccuracies == 1 ? "y" : "ies")}");
+            return parts.Count == 0 ? "clean game" : string.Join(" · ", parts);
+        }
+    }
+
+    private async Task ReviewGameAsync()
+    {
+        if (_reviewing || _session.Moves.Count == 0) return;
+
+        _reviewCancellation?.Cancel();
+        _reviewCancellation?.Dispose();
+        _reviewCancellation = new CancellationTokenSource();
+
+        _reviewing = true;
+        _review = null;
+        _reviewDone = 0;
+        _reviewTotal = _session.Moves.Count + 1;
+
+        try
+        {
+            _review = await GameReviewer.ReviewAsync(
+                _session.InitialFen,
+                _session.Moves,
+                _session.HumanColor,
+                progress: (done, total) =>
+                {
+                    _reviewDone = done;
+                    _reviewTotal = total;
+                    StateHasChanged();
+                },
+                token: _reviewCancellation.Token);
+            _reviewedAtPly = _session.Moves.Count;
+        }
+        catch (OperationCanceledException)
+        {
+            _review = null;
+        }
+        finally
+        {
+            _reviewing = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>Puts the board on the position a reviewed move produced.</summary>
+    private void JumpToPly(int ply) => _session.NavigateToPly(ply);
+
+    private static string FormatCost(int centipawns) => $"−{Math.Abs(centipawns) / 100d:0.00}";
+
     private string MoveClass(int moveIndex) => _session.CurrentPly == moveIndex + 1 ? "current" : string.Empty;
     private static string ClockLabel(long milliseconds) => milliseconds <= 0 ? "∞" : TimeSpan.FromMilliseconds(milliseconds).ToString(@"m\:ss");
     private static string ClockDuration(long milliseconds) => milliseconds <= 0 ? "PT0S" : $"PT{Math.Ceiling(milliseconds / 1000d)}S";
@@ -442,6 +558,8 @@
 
     public void Dispose()
     {
+        _reviewCancellation?.Cancel();
+        _reviewCancellation?.Dispose();
         _clockTimer?.Dispose();
         _session.StateChanged -= OnSessionChanged;
         _session.Dispose();

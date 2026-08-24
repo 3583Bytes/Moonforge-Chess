@@ -1,0 +1,188 @@
+@*
+    How the game swung, from the player's side. A diverging area against a zero
+    baseline: the reader's question is "who was ahead, and when", which is polarity
+    over time, so the sign of the value picks the hue and the baseline is the anchor.
+
+    Colours are the site's existing meanings — gold is the player, cyan is Moonforge —
+    stepped down into the dark-mode lightness band (OKLCH L 0.48–0.67) so they work as
+    data marks on the panel surface. Hues held at 84.9 and 225.9.
+*@
+
+<figure class="eval-graph">
+    <figcaption>How the game swung</figcaption>
+
+    @* Identity by swatch beside plain text, never by colouring the text itself. Rendered as
+       HTML rather than inside the SVG: the viewBox is stretched to fill the panel, which
+       would distort glyphs and push them past the edge. *@
+    <p class="eval-graph-key">
+        <span class="key-dot you" aria-hidden="true"></span>above the line, you were ahead
+        <span class="key-dot them" aria-hidden="true"></span>below it, Moonforge was
+    </p>
+
+    <div class="eval-graph-plot" @onmouseleave="() => _hover = null">
+        <svg viewBox="0 0 @W @H" preserveAspectRatio="none" role="img"
+             aria-label="@AriaSummary">
+            <!-- recessive baseline: the zero line is the only rule the reader needs -->
+            <line x1="0" y1="@Zero" x2="@W" y2="@Zero" class="eval-graph-zero" />
+
+            @if (Points.Count > 1)
+            {
+                <path d="@AreaPath(true)" class="eval-graph-fill you" />
+                <path d="@AreaPath(false)" class="eval-graph-fill them" />
+                <path d="@LinePath()" class="eval-graph-line" />
+            }
+
+            @foreach (var m in Review.Notable)
+            {
+                var (cx, cy) = At(m.Ply);
+                <circle cx="@cx" cy="@cy" r="5" @onclick="() => Select(m.Ply)"
+                        class="eval-graph-mark v-@m.Verdict.ToString().ToLowerInvariant()">
+                    <title>@m.Reference — @m.Verdict.ToString().ToLowerInvariant(), cost @Cost(m.Loss)</title>
+                </circle>
+            }
+
+            @if (_hover is int hp)
+            {
+                var (hx, hy) = At(hp);
+                <line x1="@hx" y1="0" x2="@hx" y2="@H" class="eval-graph-hair" />
+                <circle cx="@hx" cy="@hy" r="4.5" class="eval-graph-cursor" />
+            }
+
+            @* One hit slice per ply. The crosshair snaps by construction, with no need to
+               know the rendered pixel width of a stretched viewBox. *@
+            @foreach (var p in Points.Skip(1))
+            {
+                <rect x="@(X(p.Ply) - SliceWidth / 2)" y="0" width="@SliceWidth" height="@H"
+                      fill="transparent" @onmouseover="() => _hover = p.Ply" @onclick="() => Select(p.Ply)" />
+            }
+        </svg>
+
+        @if (_hover is int tp && Lookup.TryGetValue(tp, out var hovered))
+        {
+            <div class="eval-graph-tip" style="left: @(TipLeft(tp))%">
+                <strong>@Signed(hovered.ScoreAfter)</strong>
+                <span>@hovered.Reference</span>
+            </div>
+        }
+    </div>
+
+    <details class="eval-graph-table">
+        <summary>Move-by-move numbers</summary>
+        <div class="scroller">
+            <table>
+                <thead><tr><th scope="col">Move</th><th scope="col">Evaluation</th><th scope="col">Cost</th></tr></thead>
+                <tbody>
+                    @foreach (var m in Review.Moves.Where(m => m.IsHumanMove))
+                    {
+                        <tr>
+                            <td>@m.Reference</td>
+                            <td>@Signed(m.ScoreAfter)</td>
+                            <td>@(m.Loss >= GameReviewer.InaccuracyLoss ? Cost(m.Loss) : "—")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </details>
+</figure>
+
+@code {
+    [Parameter, EditorRequired] public GameReviewResult Review { get; set; } = default!;
+    [Parameter] public EventCallback<int> OnSelectPly { get; set; }
+
+    private const int W = 300, H = 112;
+
+    /// <summary>
+    /// Centipawns are linear but chess advantage is not: on a linear ±6-pawn axis an entire
+    /// normal game compresses into a flat line near zero and only a catastrophe is visible.
+    /// tanh keeps resolution where games are actually decided and saturates past ~6 pawns.
+    /// </summary>
+    private const double Scale = 300.0;
+
+    private int? _hover;
+    private List<(int Ply, int Score)>? _points;
+    private Dictionary<int, ReviewedMove>? _lookup;
+
+    // A second review on the same component instance would otherwise keep the first
+    // review's geometry.
+    protected override void OnParametersSet()
+    {
+        _points = null;
+        _lookup = null;
+        _hover = null;
+    }
+
+    private int Zero => H / 2;
+
+    /// <summary>Ply 0 is the starting position, so the line begins before the first move.</summary>
+    private List<(int Ply, int Score)> Points =>
+        _points ??= Enumerable.Repeat((0, Review.StartScore), 1)
+            .Concat(Review.Moves.Select(m => (m.Ply, m.Score())))
+            .ToList();
+
+    private Dictionary<int, ReviewedMove> Lookup =>
+        _lookup ??= Review.Moves.ToDictionary(m => m.Ply);
+
+    private int LastPly => Points.Count == 0 ? 0 : Points[^1].Ply;
+
+    private (double X, double Y) At(int ply)
+    {
+        int i = Points.FindIndex(p => p.Ply == ply);
+        if (i < 0) i = 0;
+        return (X(Points[i].Ply), Y(Points[i].Score));
+    }
+
+    private double X(int ply) => LastPly == 0 ? 0 : (double)ply / LastPly * W;
+
+    private double Y(int score) => Zero - Math.Tanh(score / Scale) * (H / 2.0 - 5);
+
+    private string LinePath() =>
+        string.Join(" ", Points.Select((p, i) => $"{(i == 0 ? "M" : "L")}{X(p.Ply):0.##},{Y(p.Score):0.##}"));
+
+    /// <summary>
+    /// One arm of the diverging area. Clipping each arm to its own side of the baseline is
+    /// what makes the sign readable at a glance, rather than a single band crossing the line.
+    /// </summary>
+    private string AreaPath(bool above)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"M0,{Zero} ");
+        foreach (var p in Points)
+        {
+            double y = Y(p.Score);
+            double clipped = above ? Math.Min(y, Zero) : Math.Max(y, Zero);
+            sb.Append($"L{X(p.Ply):0.##},{clipped:0.##} ");
+        }
+        sb.Append($"L{W},{Zero} Z");
+        return sb.ToString();
+    }
+
+    private double SliceWidth => LastPly == 0 ? W : (double)W / LastPly;
+
+    private Task Select(int ply) => OnSelectPly.HasDelegate ? OnSelectPly.InvokeAsync(ply) : Task.CompletedTask;
+
+    private double TipLeft(int ply) => LastPly == 0 ? 0 : Math.Clamp((double)ply / LastPly * 100, 8, 92);
+
+    private string AriaSummary
+    {
+        get
+        {
+            if (Review.Moves.Count == 0) return "No moves to chart.";
+            int end = Review.Moves[^1].Score();
+            string verdict = end > 100 ? "ending in your favour"
+                : end < -100 ? "ending in Moonforge's favour"
+                : "ending close to level";
+            return $"Evaluation across {Review.Moves.Count} moves from your side, {verdict}. "
+                 + $"{Review.Notable.Count} costly move(s) marked. The table below lists every value.";
+        }
+    }
+
+    private static string Signed(int cp) => cp switch
+    {
+        > 0 => $"+{cp / 100d:0.00}",
+        < 0 => $"{cp / 100d:0.00}",
+        _ => "0.00",
+    };
+
+    private static string Cost(int cp) => $"−{Math.Abs(cp) / 100d:0.00}";
+}

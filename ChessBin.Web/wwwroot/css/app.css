@@ -138,7 +138,7 @@ button:focus-visible, select:focus-visible, a:focus-visible {
 button:disabled { cursor: not-allowed; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 13px; }
 .section-heading h2 { margin: 0; font: 600 10px/1 ui-monospace, monospace; letter-spacing: .1em; text-transform: uppercase; }
-.section-heading > span { color: #777b81; font: 500 10px/1 ui-monospace, monospace; }
+.section-heading > span { color: #777b81; font: 500 10px/1.5 ui-monospace, monospace; text-align: right; }
 .empty-state { margin: 22px 0; color: #686d74; text-align: center; font: italic 13px/1.4 Georgia, serif; }
 .moves-section { min-height: 155px; max-height: 250px; overflow: auto; }
 .move-list { margin: 0; padding: 0; list-style: none; }
@@ -220,6 +220,58 @@ summary { cursor: pointer; }
 .boot-links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
 .boot-links a { padding: 11px 16px; color: var(--ink); border: 1px solid var(--line); background: var(--surface); text-decoration: none; font: 600 11px/1 ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; }
 .boot-links a:hover { color: var(--gold-bright); border-color: var(--gold-line); }
+
+/* ── Evaluation graph ─────────────────────────────────────────────────────────
+   Diverging area on a zero baseline: gold above means the player was ahead, cyan
+   below means Moonforge was. Both hues are the site's existing meanings stepped
+   into the dark-mode lightness band (OKLCH L 0.48-0.67) so they hold up as data
+   marks; validated for CVD separation against the panel surface. */
+.eval-graph { margin: 0 0 16px; }
+.eval-graph figcaption { margin-bottom: 9px; color: #c8c1b8; font: 600 10px/1 ui-monospace, monospace; letter-spacing: .1em; text-transform: uppercase; }
+.eval-graph-plot { position: relative; }
+.eval-graph svg { display: block; width: 100%; height: 112px; overflow: hidden; }
+.eval-graph-key { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 12px; margin: 0 0 10px; color: #70747a; font: 500 9px/1.5 ui-monospace, monospace; letter-spacing: .03em; }
+.key-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.key-dot.you { background: #b08400; }
+.key-dot.them { background: #009ac4; }
+.eval-graph-zero { stroke: #3a4048; stroke-width: 1; }
+.eval-graph-fill.you { fill: #b08400; fill-opacity: .14; }
+.eval-graph-fill.them { fill: #009ac4; fill-opacity: .14; }
+/* The fills carry polarity, so the line is neutral structure — a gold line running
+   through Moonforge's half of the chart would contradict the legend. */
+.eval-graph-line { fill: none; stroke: #cfc6bb; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+/* Dots carry a 2px ring in the surface colour so they stay legible over the line. */
+.eval-graph-mark { stroke: #12151a; stroke-width: 2; cursor: pointer; }
+.eval-graph-mark.v-blunder { fill: #d4685c; }
+.eval-graph-mark.v-mistake { fill: #d99a2b; }
+.eval-graph-mark.v-inaccuracy { fill: #9a9ea3; }
+.eval-graph-hair { stroke: #5a616b; stroke-width: 1; stroke-dasharray: 2 3; }
+.eval-graph-cursor { fill: #f4efe6; stroke: #12151a; stroke-width: 2; }
+.eval-graph-tip { position: absolute; top: -4px; max-width: 92%; transform: translateX(-50%); display: flex; align-items: baseline; gap: 7px; padding: 5px 9px; background: #1c2026; border: 1px solid var(--line); pointer-events: none; white-space: nowrap; }
+.eval-graph-tip strong { color: var(--ink); font: 700 12px/1 ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+.eval-graph-tip span { color: #9a9ea3; font: 500 10px/1 ui-monospace, monospace; }
+.eval-graph-table { margin-top: 10px; color: #85898e; font-size: 10px; }
+.eval-graph-table summary { cursor: pointer; font: 600 9px/1.6 ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; }
+.eval-graph-table table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+.eval-graph-table th { padding: 4px 6px; color: #70747a; font: 600 8px/1 ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; text-align: left; border-bottom: 1px solid var(--line); }
+.eval-graph-table td { padding: 4px 6px; color: #a9a399; font: 500 10px/1.4 ui-monospace, monospace; font-variant-numeric: tabular-nums; border-bottom: 1px dotted #30343a; }
+
+/* ── Game review ──────────────────────────────────────────────────────────── */
+.review-list { margin: 4px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 1px; background: var(--line); }
+.review-list li { padding: 13px 14px; background: #12151a; }
+.review-jump { display: block; width: 100%; padding: 0; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.review-jump:hover .review-head strong { color: var(--gold-bright); }
+.review-why { display: block; margin: 0; color: #a9a399; font: 400 13px/1.6 Georgia, serif; }
+.review-head { display: flex; align-items: baseline; gap: 9px; margin-bottom: 7px; }
+.review-head strong { font: 600 12.5px/1 ui-monospace, monospace; }
+.review-head .review-cost { margin-left: auto; color: #cf8a80; font: 700 12px/1 ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+.review-list p { margin: 0; color: #a9a399; font: 400 13px/1.6 Georgia, serif; }
+.verdict { padding: 3px 7px; font: 700 8px/1.3 ui-monospace, monospace; letter-spacing: .1em; text-transform: uppercase; }
+.v-blunder { color: #d4685c; border: 1px solid rgba(212, 104, 92, .45); background: rgba(212, 104, 92, .1); }
+.v-mistake { color: #d99a2b; border: 1px solid rgba(217, 154, 43, .45); background: rgba(217, 154, 43, .1); }
+.v-inaccuracy { color: #9a9ea3; border: 1px solid var(--line); }
+.v-best { color: #61b67a; border: 1px solid rgba(97, 182, 122, .45); background: rgba(97, 182, 122, .1); }
+.v-solid { color: #70747a; border: 1px dashed var(--line); }
 
 /* ── Daily puzzle ─────────────────────────────────────────────────────────── */
 /* The 680px floor is sized for the game panel's contents; the puzzle panel is

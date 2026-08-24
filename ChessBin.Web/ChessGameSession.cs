@@ -41,6 +41,9 @@ public sealed class ChessGameSession : IDisposable
     public bool CanStepForward => !IsThinking && _currentPly < _moves.Count;
     public string Status { get; private set; }
     public string Fen => _engine.FEN;
+
+    /// <summary>The position the game started from, so it can be replayed for review.</summary>
+    public string InitialFen => _initialFen;
     public IReadOnlyList<PlayedMove> Moves => _moves;
     public EngineSearchInfo? LastSearch { get; private set; }
     public bool LastMoveWasBook { get; private set; }
