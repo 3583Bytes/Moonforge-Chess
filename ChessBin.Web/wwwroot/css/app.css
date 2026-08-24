@@ -241,6 +241,15 @@ summary { cursor: pointer; }
 .puzzle-themes { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 15px; }
 .theme-tag { padding: 4px 8px; color: #9ba0a6; border: 1px solid var(--line); font: 600 9px/1.3 ui-monospace, monospace; letter-spacing: .04em; text-transform: uppercase; }
 
+.band-picker { display: block; margin-top: 16px; }
+.band-picker > span { display: block; margin-bottom: 7px; color: #858990; font: 600 9px/1 ui-monospace, monospace; letter-spacing: .1em; text-transform: uppercase; }
+.band-picker select { width: 100%; height: 36px; padding: 0 28px 0 10px; color: #ddd7ce; border: 1px solid #343940; background: #191c21; }
+
+.keep-going { display: grid; gap: 10px; justify-items: start; }
+.keep-going .position-message { margin: 0; }
+/* .primary-button is a grid child on the game page; here it stands alone. */
+.keep-going .primary-button { grid-column: auto; display: inline-grid; place-items: center; width: 100%; margin-top: 0; text-decoration: none; }
+
 .eval-swing { display: flex; align-items: baseline; gap: 9px; margin: 0 0 14px; }
 .eval-swing strong { font: 700 24px/1 ui-monospace, monospace; font-variant-numeric: tabular-nums; }
 .eval-swing span { color: var(--muted); font: 400 13px/1.4 Georgia, serif; }

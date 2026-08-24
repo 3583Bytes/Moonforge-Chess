@@ -1,39 +1,51 @@
 @page "/puzzle"
+@page "/puzzle/"
+@page "/puzzle/practice"
 @using ChessEngine.Engine
 @using System.Text.Json
 @implements IDisposable
 
-<PageTitle>Daily puzzle · ChessBin</PageTitle>
+<PageTitle>@(_isPractice ? "Practice · ChessBin" : "Daily puzzle · ChessBin")</PageTitle>
 
 <main class="site-shell">
     <SiteHeader />
 
     <section class="hero puzzle-hero">
         <div>
-            <p class="eyebrow">Daily puzzle · @Today.ToString("d MMMM yyyy")</p>
+            <p class="eyebrow">@(_isPractice ? $"Practice · {_practiceSolved} solved this session" : $"Daily puzzle · {Today:d MMMM yyyy}")</p>
             <h1>@HeroHeading</h1>
         </div>
-        <p class="intro">
-            One position a day, the same for everyone, straight from real games. No account —
-            your streak lives in this browser.
-        </p>
+        @if (_isPractice)
+        {
+            <p class="intro">
+                Puzzles from the same set, as many as you want. Nothing here touches your daily
+                streak — practice freely.
+            </p>
+        }
+        else
+        {
+            <p class="intro">
+                One position a day, the same for everyone, straight from real games. No account —
+                your streak lives in this browser.
+            </p>
+        }
     </section>
 
     @if (_loadError is not null)
     {
         <section class="puzzle-error" role="alert">
-            <strong>Today's puzzle didn't load.</strong>
+            <strong>@(_isPractice ? "That puzzle didn't load." : "Today's puzzle didn't load.")</strong>
             <p>@_loadError</p>
             <button class="primary-button" type="button" @onclick="LoadAsync">Try again</button>
         </section>
     }
     else if (!_session.IsLoaded)
     {
-        <section class="puzzle-loading" aria-live="polite">Loading today's position…</section>
+        <section class="puzzle-loading" aria-live="polite">@(_isPractice ? "Picking a position…" : "Loading today's position…")</section>
     }
     else
     {
-        <section class="game-layout" aria-label="Daily puzzle">
+        <section class="game-layout" aria-label="@(_isPractice ? "Practice puzzle" : "Daily puzzle")">
             <div class="board-column">
                 <div class="player-strip opponent">
                     <div class="avatar moonforge-avatar" aria-hidden="true">☾</div>
@@ -96,8 +108,8 @@
 
             <aside class="control-panel puzzle-panel">
                 <div class="panel-tabs">
-                    <button type="button">Today</button>
-                    <span>#@DailyIndex · @_session.Puzzle!.Id</span>
+                    <button type="button">@(_isPractice ? "Practice" : "Today")</button>
+                    <span>@(_isPractice ? _session.Puzzle!.Id : $"#{DailyIndex} · {_session.Puzzle!.Id}")</span>
                 </div>
 
                 <section class="panel-section">
@@ -119,21 +131,47 @@
                     </div>
                 </section>
 
-                <section class="panel-section">
-                    <div class="section-heading">
-                        <h2>Your streak</h2>
-                        <span>Saved locally</span>
-                    </div>
-                    <dl class="puzzle-facts">
-                        <div><dt>Current</dt><dd>@_progress.Streak</dd></div>
-                        <div><dt>Best</dt><dd>@_progress.Best</dd></div>
-                        <div><dt>Solved</dt><dd>@_progress.TotalSolved</dd></div>
-                    </dl>
-                    @if (_alreadySolvedToday)
-                    {
-                        <p class="position-message">You already solved today's puzzle — replaying won't change your streak.</p>
-                    }
-                </section>
+                @if (_isPractice)
+                {
+                    <section class="panel-section">
+                        <div class="section-heading">
+                            <h2>This session</h2>
+                            <span>Not counted</span>
+                        </div>
+                        <dl class="puzzle-facts">
+                            <div><dt>Solved</dt><dd>@_practiceSolved</dd></div>
+                            <div><dt>Seen</dt><dd>@_seen.Count</dd></div>
+                            <div><dt>Streak</dt><dd>@_progress.Streak</dd></div>
+                        </dl>
+                        <label class="band-picker">
+                            <span>Difficulty</span>
+                            <select value="@_band" @onchange="OnBandChangedAsync">
+                                <option value="@RatingBand.Any">Any (1000–1899)</option>
+                                <option value="@RatingBand.Easy">Easy (up to 1299)</option>
+                                <option value="@RatingBand.Medium">Medium (1300–1599)</option>
+                                <option value="@RatingBand.Hard">Hard (1600+)</option>
+                            </select>
+                        </label>
+                    </section>
+                }
+                else
+                {
+                    <section class="panel-section">
+                        <div class="section-heading">
+                            <h2>Your streak</h2>
+                            <span>Saved locally</span>
+                        </div>
+                        <dl class="puzzle-facts">
+                            <div><dt>Current</dt><dd>@_progress.Streak</dd></div>
+                            <div><dt>Best</dt><dd>@_progress.Best</dd></div>
+                            <div><dt>Solved</dt><dd>@_progress.TotalSolved</dd></div>
+                        </dl>
+                        @if (_alreadySolvedToday)
+                        {
+                            <p class="position-message">You already solved today's puzzle — replaying won't change your streak.</p>
+                        }
+                    </section>
+                }
 
                 @if (_session.IsComplete)
                 {
@@ -168,6 +206,18 @@
                         }
                         <a class="puzzle-source" href="@_session.Puzzle!.Url" target="_blank" rel="noreferrer">See the game it came from ↗</a>
                     </section>
+
+                    <section class="panel-section keep-going">
+                        @if (_isPractice)
+                        {
+                            <button class="primary-button" type="button" @onclick="NextPracticeAsync">Next puzzle</button>
+                        }
+                        else
+                        {
+                            <p class="position-message">That's today's. Want more?</p>
+                            <a class="primary-button" href="puzzle/practice">Practice puzzles</a>
+                        }
+                    </section>
                 }
 
                 <footer class="panel-actions">
@@ -177,9 +227,18 @@
                     <button type="button" disabled="@_session.IsComplete" @onclick="_session.RevealAsync" title="Give up and see the solution">
                         ⚑ <span>Give up</span>
                     </button>
-                    <button type="button" disabled="@(!_session.IsComplete)" @onclick="ShareAsync" title="Copy a spoiler-free result">
-                        ⧉ <span>@_shareLabel</span>
-                    </button>
+                    @if (_isPractice)
+                    {
+                        <button type="button" disabled="@(!_session.IsComplete)" @onclick="NextPracticeAsync" title="Load another puzzle">
+                            ↻ <span>Next</span>
+                        </button>
+                    }
+                    else
+                    {
+                        <button type="button" disabled="@(!_session.IsComplete)" @onclick="ShareAsync" title="Copy a spoiler-free result">
+                            ⧉ <span>@_shareLabel</span>
+                        </button>
+                    }
                 </footer>
             </aside>
         </section>
@@ -197,11 +256,19 @@
     private string _shareLabel = "Share";
     private string? _loadError;
     private bool _alreadySolvedToday;
-    private bool _countedToday;
+    private bool _counted;
     private int DailyIndex;
+
+    private readonly HashSet<string> _seen = [];
+    private readonly Random _rng = new();
+    private PuzzleManifest? _manifest;
+    private bool _isPractice;
+    private int _practiceSolved;
+    private RatingBand _band = RatingBand.Any;
 
     [Inject] private HttpClient Http { get; set; } = null!;
     [Inject] private IJSRuntime Js { get; set; } = null!;
+    [Inject] private NavigationManager Nav { get; set; } = null!;
 
     private static DateOnly Today => DateOnly.FromDateTime(DateTime.UtcNow);
 
@@ -209,7 +276,7 @@
     {
         PuzzleOutcome.Solved => "Solved.",
         PuzzleOutcome.Revealed => "Next time.",
-        _ => "Find the line.",
+        _ => _isPractice ? "Keep going." : "Find the line.",
     };
 
     private string OpponentLabel => _session.SolverColor == ChessPieceColor.White ? "Black" : "White";
@@ -220,25 +287,37 @@
     {
         _session.StateChanged += OnSessionChanged;
         await LoadProgressAsync();
+    }
+
+    // Both routes render this same component, so switching between them reuses the
+    // instance and only reaches OnParametersSet — not OnInitialized.
+    protected override async Task OnParametersSetAsync()
+    {
+        bool practice = Nav.ToBaseRelativePath(Nav.Uri).TrimEnd('/')
+            .EndsWith("practice", StringComparison.OrdinalIgnoreCase);
+
+        if (practice == _isPractice && _session.IsLoaded) return;
+
+        _isPractice = practice;
         await LoadAsync();
     }
 
     private async Task LoadAsync()
     {
         _loadError = null;
+        _counted = false;
+        _shareLabel = "Share";
+
         try
         {
-            var manifest = PuzzleData.ParseManifest(await Http.GetStringAsync(PuzzleData.ManifestPath));
-            DailyIndex = PuzzleData.IndexForDate(Today, manifest.Count);
+            _manifest ??= PuzzleData.ParseManifest(await Http.GetStringAsync(PuzzleData.ManifestPath));
 
-            int shard = PuzzleData.ShardIndexFor(DailyIndex, manifest.ShardSize);
-            int offset = PuzzleData.OffsetWithinShard(DailyIndex, manifest.ShardSize);
+            PuzzleRecord puzzle = _isPractice
+                ? await PickPracticeAsync(_manifest)
+                : await LoadDailyAsync(_manifest);
 
-            var puzzles = PuzzleData.ParseShard(await Http.GetStringAsync(PuzzleData.ShardPath(shard)));
-            if (offset >= puzzles.Length)
-                throw new InvalidDataException($"shard {shard} holds {puzzles.Length} puzzles, needed index {offset}");
-
-            _session.Load(puzzles[offset]);
+            _seen.Add(puzzle.Id);
+            _session.Load(puzzle);
         }
         catch (Exception ex)
         {
@@ -248,13 +327,50 @@
         StateHasChanged();
     }
 
+    private async Task<PuzzleRecord> LoadDailyAsync(PuzzleManifest manifest)
+    {
+        DailyIndex = PuzzleData.IndexForDate(Today, manifest.Count);
+
+        int shard = PuzzleData.ShardIndexFor(DailyIndex, manifest.ShardSize);
+        int offset = PuzzleData.OffsetWithinShard(DailyIndex, manifest.ShardSize);
+
+        var puzzles = PuzzleData.ParseShard(await Http.GetStringAsync(PuzzleData.ShardPath(shard)));
+        if (offset >= puzzles.Length)
+            throw new InvalidDataException($"shard {shard} holds {puzzles.Length} puzzles, needed index {offset}");
+
+        return puzzles[offset];
+    }
+
+    /// <summary>
+    /// One random shard is enough: the importer spreads every rating band across every
+    /// shard, so a single 8 KB fetch can serve any difficulty.
+    /// </summary>
+    private async Task<PuzzleRecord> PickPracticeAsync(PuzzleManifest manifest)
+    {
+        int shard = _rng.Next(manifest.Shards);
+        var puzzles = PuzzleData.ParseShard(await Http.GetStringAsync(PuzzleData.ShardPath(shard)));
+
+        return PuzzleData.PickPractice(puzzles, _band, _seen, _rng)
+            ?? throw new InvalidDataException($"shard {shard} offered no usable puzzle");
+    }
+
+    private Task NextPracticeAsync() => LoadAsync();
+
+    private async Task OnBandChangedAsync(ChangeEventArgs e)
+    {
+        if (Enum.TryParse(e.Value?.ToString(), out RatingBand band))
+            _band = band;
+        await LoadAsync();
+    }
+
     private async void OnSessionChanged()
     {
         // A solve is worth recording exactly once, even though the event fires on every move.
-        if (_session.Outcome == PuzzleOutcome.Solved && !_countedToday)
+        if (_session.Outcome == PuzzleOutcome.Solved && !_counted)
         {
-            _countedToday = true;
-            await RecordSolveAsync();
+            _counted = true;
+            if (_isPractice) _practiceSolved++;
+            else await RecordSolveAsync();
         }
 
         await InvokeAsync(StateHasChanged);

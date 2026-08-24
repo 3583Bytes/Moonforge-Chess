@@ -29,6 +29,15 @@ public sealed record PuzzleRecord(
     public bool IsSolverPly(int index) => index % 2 == 0;
 }
 
+/// <summary>Difficulty filter for practice mode.</summary>
+public enum RatingBand
+{
+    Any,
+    Easy,
+    Medium,
+    Hard,
+}
+
 /// <summary>Shape of <c>wwwroot/puzzles/manifest.json</c>.</summary>
 public sealed record PuzzleManifest(
     int Version,
@@ -81,6 +90,45 @@ public static class PuzzleData
     }
 
     public static string ShardPath(int shardIndex) => $"puzzles/shard-{shardIndex:D3}.json";
+
+    /// <summary>
+    /// Picks a practice puzzle out of one shard. The importer lays puzzles down round-robin
+    /// across rating bands, so every shard holds a spread of all difficulties — which means a
+    /// single 8 KB fetch can satisfy any band, with no index of the whole set.
+    /// </summary>
+    /// <param name="exclude">Puzzle ids already served this session, so practice doesn't repeat itself.</param>
+    public static PuzzleRecord? PickPractice(
+        IReadOnlyList<PuzzleRecord> shard,
+        RatingBand band,
+        ISet<string> exclude,
+        Random rng)
+    {
+        ArgumentNullException.ThrowIfNull(shard);
+        ArgumentNullException.ThrowIfNull(exclude);
+        ArgumentNullException.ThrowIfNull(rng);
+
+        (int min, int max) = BandRange(band);
+
+        // Preferred: in band and not seen. Then relax, rather than dead-ending on a
+        // player who has worked through everything this shard holds.
+        var candidates = shard.Where(p => p.Rating >= min && p.Rating <= max && !exclude.Contains(p.Id)).ToArray();
+        if (candidates.Length == 0)
+            candidates = shard.Where(p => p.Rating >= min && p.Rating <= max).ToArray();
+        if (candidates.Length == 0)
+            candidates = shard.Where(p => !exclude.Contains(p.Id)).ToArray();
+        if (candidates.Length == 0)
+            candidates = [.. shard];
+
+        return candidates.Length == 0 ? null : candidates[rng.Next(candidates.Length)];
+    }
+
+    public static (int Min, int Max) BandRange(RatingBand band) => band switch
+    {
+        RatingBand.Easy => (0, 1299),
+        RatingBand.Medium => (1300, 1599),
+        RatingBand.Hard => (1600, int.MaxValue),
+        _ => (0, int.MaxValue),
+    };
 
     public static PuzzleManifest ParseManifest(string json) =>
         JsonSerializer.Deserialize(json, PuzzleJsonContext.Default.PuzzleManifest)
