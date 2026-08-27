@@ -10,10 +10,10 @@
 
     <section class="hero">
         <div>
-            <p class="eyebrow">Moonforge Chess · Browser edition</p>
-            <h1>Play the engine.<br /><em>See its thinking.</em></h1>
+            <p class="eyebrow">Free · no signup · nothing to install</p>
+            <h1>Play chess.<br /><em>Find out why you lost.</em></h1>
         </div>
-        <p class="intro">A handcrafted chess engine running entirely in your browser. No account, no server, just you and the machine.</p>
+        <p class="intro">Play a game, solve today's puzzle, or paste a game from anywhere and have it explained. All free, all in your browser.</p>
     </section>
 
     <section class="game-layout" aria-label="Chess game">
@@ -38,6 +38,9 @@
                                 ShowCoordinates="_showCoordinates"
                                 Label="Chess board"
                                 ExtraClass="@(_session.IsThinking ? "is-thinking" : null)"
+                                LastFrom="@(_session.LastMovePlayed?.FromIndex ?? -1)"
+                                LastTo="@(_session.LastMovePlayed?.ToIndex ?? -1)"
+                                MoveKey="_session.CurrentPly"
                                 OnSquareClick="HandleSquareAsync" />
 
                 @if (_session.HasPendingPromotion)
@@ -68,12 +71,13 @@
                 <span class="status-icon">@StatusIcon</span>
                 <span>@_session.Status</span>
             </div>
+
         </div>
 
         <aside class="control-panel">
             <div class="panel-tabs" role="tablist">
                 <button class="active" type="button" role="tab" aria-selected="true">Game</button>
-                <span>Engine room</span>
+                <span>Analysis</span>
             </div>
 
             <section class="panel-section setup-section">
@@ -140,24 +144,27 @@
 
             <section class="panel-section engine-section">
                 <div class="section-heading">
-                    <h2>Engine room</h2>
+                    <h2>Who's winning</h2>
                     <span class="eval-score">@EvaluationLabel</span>
                 </div>
-                <div class="eval-track" aria-label="Static evaluation @EvaluationLabel">
+                <div class="eval-track" aria-label="Position score @EvaluationLabel">
                     <span style="width: @EvaluationPercent%"></span>
                 </div>
-                <dl class="search-stats">
-                    <div><dt>Depth</dt><dd>@SearchDepth</dd></div>
-                    <div><dt>Nodes</dt><dd>@SearchNodes</dd></div>
-                    <div><dt>Speed</dt><dd>@SearchSpeed</dd></div>
-                    <div><dt>Source</dt><dd>@SearchSource</dd></div>
-                </dl>
-                <div class="pv-block">
-                    <span>Principal variation</span>
-                    <code>@PrincipalVariation</code>
-                </div>
-                <details>
-                    <summary>Evaluation detail</summary>
+                <p class="position-message">@WhoIsAhead</p>
+
+                @* Search telemetry is for people who want it, not the front of the panel. *@
+                <details class="under-the-hood">
+                    <summary>Under the hood</summary>
+                    <dl class="search-stats">
+                        <div><dt>Depth</dt><dd>@SearchDepth</dd></div>
+                        <div><dt>Nodes</dt><dd>@SearchNodes</dd></div>
+                        <div><dt>Speed</dt><dd>@SearchSpeed</dd></div>
+                        <div><dt>Source</dt><dd>@SearchSource</dd></div>
+                    </dl>
+                    <div class="pv-block">
+                        <span>The line it expects</span>
+                        <code>@PrincipalVariation</code>
+                    </div>
                     <div class="eval-detail">
                         @foreach (var item in EvaluationItems)
                         {
@@ -180,16 +187,17 @@
             }
 
             <section class="panel-section position-section">
-                <div class="section-heading"><h2>Position</h2><span>FEN / PGN</span></div>
-                <input class="fen-input" @bind="_fenInput" aria-label="FEN position" placeholder="Paste a FEN position" />
+                <div class="section-heading"><h2>Import &amp; share</h2><span>optional</span></div>
+                <input class="fen-input" @bind="_fenInput" aria-label="Paste a position"
+                       placeholder="Paste a position to set up the board" />
                 @if (!string.IsNullOrWhiteSpace(_positionMessage))
                 {
                     <p class="position-message">@_positionMessage</p>
                 }
                 <div class="position-actions">
-                    <button type="button" @onclick="LoadFen">Load FEN</button>
-                    <button type="button" @onclick="CopyPgnAsync">Copy PGN</button>
-                    <button type="button" @onclick="SharePositionAsync">Share</button>
+                    <button type="button" @onclick="LoadFen" title="Set the board from a pasted position (FEN)">Set up</button>
+                    <button type="button" @onclick="CopyPgnAsync" title="Copy the game in PGN notation">Copy game</button>
+                    <button type="button" @onclick="SharePositionAsync" title="Copy a link to this position">Share link</button>
                 </div>
             </section>
 
@@ -203,30 +211,28 @@
             <footer class="panel-actions">
                 <button type="button" disabled="@(!_session.CanUndo)" @onclick="UndoTurn" title="Undo the last turn">↶ <span>Undo</span></button>
                 <button type="button" @onclick="FlipBoard" title="Flip board">⇅ <span>Flip</span></button>
-                <button type="button" @onclick="CopyFenAsync" title="Copy FEN">⧉ <span>@_copyLabel</span></button>
+                <button type="button" @onclick="CopyFenAsync" title="Copy position">⧉ <span>@_copyLabel</span></button>
             </footer>
         </aside>
     </section>
 
     <section class="project-section" aria-labelledby="about-moonforge">
         <div class="project-intro">
-            <p class="eyebrow">Open source · C# · .NET 10</p>
-            <h2 id="about-moonforge">A chess engine<br /><em>built to be understood.</em></h2>
+            <p class="eyebrow">Free forever · no account</p>
+            <h2 id="about-moonforge">Everything here is free,<br /><em>and stays on your device.</em></h2>
         </div>
 
         <div class="project-copy">
             <p>
-                Moonforge Chess is a handcrafted, single-threaded chess engine built around
-                bitboards, alpha-beta search, and a classical evaluation. There is no neural
-                network hidden behind the curtain: its move generation, search, and scoring
-                can all be followed from end to end.
+                Play as many games as you like against Moonforge, solve a new puzzle every day,
+                and get any game explained move by move — including games you played somewhere
+                else. There is no sign-up, no paywall on the analysis, and no advertising.
             </p>
             <p>
-                ChessBin runs that same engine locally through WebAssembly. Your games never
-                leave the browser, and the Engine Room exposes Moonforge's evaluation and
-                principal variation while you play.
+                Everything runs on your own device, so your games never leave the browser. That
+                also means it works with no connection once you have visited.
             </p>
-            <p class="how-to-play"><strong>How to play:</strong> select a piece and a highlighted square. Use the move controls to review a game, or share a FEN position with another player. All analysis runs on your device.</p>
+            <p class="how-to-play"><strong>How to play:</strong> click one of your pieces, then a highlighted square. When a game ends you get a review that says what each move cost and why — the part most sites charge for.</p>
 
             <nav class="project-links" aria-label="Moonforge project links">
                 <a class="project-link primary" href="https://github.com/3583Bytes/Moonforge-Chess" target="_blank" rel="noreferrer">
@@ -234,8 +240,8 @@
                     <strong>GitHub ↗</strong>
                 </a>
                 <a class="project-link" href="https://github.com/3583Bytes/Moonforge-Chess#readme" target="_blank" rel="noreferrer">
-                    <span>How it works</span>
-                    <strong>Documentation ↗</strong>
+                    <span>How the engine works</span>
+                    <strong>For developers ↗</strong>
                 </a>
                 <a class="project-link" href="https://github.com/3583Bytes/Moonforge-Chess/releases" target="_blank" rel="noreferrer">
                     <span>Desktop engine</span>
@@ -267,7 +273,7 @@
     private ChessPieceColor _selectedSide = ChessPieceColor.White;
     private Engine.Difficulty _selectedDifficulty = Engine.Difficulty.Easy;
     private string _selectedTimeControl = "Unlimited";
-    private string _copyLabel = "Copy FEN";
+    private string _copyLabel = "Copy position";
     private string _fenInput = string.Empty;
     private string _positionMessage = string.Empty;
     private bool _showCoordinates = true;
@@ -286,6 +292,28 @@
     private string EngineSideLabel => _session.HumanColor == ChessPieceColor.White ? "Black pieces" : "White pieces";
     private string StatusIcon => _session.IsThinking ? "◌" : _session.IsGameOver ? "◆" : "●";
     private string EvaluationLabel => FormatCentipawns(_session.Evaluation.Total);
+
+    /// <summary>
+    /// The score in words. A number in centipawns means nothing to most players; "roughly
+    /// level" does. Attributed, because it is the engine's opinion of a static position.
+    /// </summary>
+    private string WhoIsAhead
+    {
+        get
+        {
+            int mine = _session.Evaluation.Total * (_session.HumanColor == ChessPieceColor.White ? 1 : -1);
+            return mine switch
+            {
+                >= 500 => "Moonforge has you winning comfortably.",
+                >= 150 => "Moonforge has you clearly better.",
+                >= 50 => "Moonforge has you slightly better.",
+                > -50 => "Moonforge has this roughly level.",
+                > -150 => "Moonforge has you slightly worse.",
+                > -500 => "Moonforge has you clearly worse.",
+                _ => "Moonforge has you losing badly.",
+            };
+        }
+    }
     private double EvaluationPercent => Math.Clamp(50 + _session.Evaluation.Total / 20d, 4, 96);
     private string SearchDepth => _session.LastSearch is null ? "—" : _session.LastSearch.Depth.ToString();
     private string SearchNodes => _session.LastSearch is null ? "—" : FormatNodes(_session.LastSearch.TotalNodes);
@@ -310,9 +338,10 @@
         }
     }
 
+
     private async Task StartNewGameAsync()
     {
-        _copyLabel = "Copy FEN";
+        _copyLabel = "Copy position";
         _positionMessage = string.Empty;
         await SaveSettingsAsync();
         await _session.NewGameAsync(_selectedSide, _selectedDifficulty, GetTimeControl());
@@ -323,7 +352,7 @@
         int moveCount = _session.Moves.Count;
         await _session.ClickSquareAsync(square.Column, square.Row);
         if (_soundEnabled && _session.Moves.Count > moveCount)
-            await Js.InvokeVoidAsync("chessBin.playMoveSound");
+            await Js.InvokeVoidAsync("chessBin.playSound", _session.LastMovePlayed?.SoundKind ?? "move");
     }
 
     private async Task PromoteAsync(ChessPieceType type)
@@ -331,7 +360,7 @@
         int moveCount = _session.Moves.Count;
         await _session.CompletePromotionAsync(type);
         if (_soundEnabled && _session.Moves.Count > moveCount)
-            await Js.InvokeVoidAsync("chessBin.playMoveSound");
+            await Js.InvokeVoidAsync("chessBin.playSound", _session.LastMovePlayed?.SoundKind ?? "move");
     }
 
     private void CancelPromotion()
@@ -342,7 +371,7 @@
     private void UndoTurn()
     {
         _session.UndoTurn();
-        _copyLabel = "Copy FEN";
+        _copyLabel = "Copy position";
     }
 
     private void FlipBoard() => _session.FlipBoard();

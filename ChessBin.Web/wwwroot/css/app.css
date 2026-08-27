@@ -95,7 +95,7 @@ button:focus-visible, select:focus-visible, a:focus-visible {
 @keyframes pulse { 0%, 65%, 100% { opacity: .25; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
 
 .board-wrap { position: relative; width: 100%; aspect-ratio: 1; margin-top: 10px; box-shadow: 0 20px 60px rgba(0, 0, 0, .28); }
-.chessboard { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); grid-template-rows: repeat(8, minmax(0, 1fr)); width: 100%; height: 100%; border: 1px solid #201b17; transition: filter .2s; }
+.chessboard { container-type: inline-size; display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); grid-template-rows: repeat(8, minmax(0, 1fr)); width: 100%; height: 100%; border: 1px solid #201b17; transition: filter .2s; }
 .chessboard.is-thinking { filter: saturate(.86); }
 .square { position: relative; display: grid; place-items: center; min-width: 0; min-height: 0; padding: 0; border: 0; cursor: pointer; }
 .square:disabled { cursor: default; opacity: 1; }
@@ -106,6 +106,17 @@ button:focus-visible, select:focus-visible, a:focus-visible {
 .square.last-move::before { content: ""; position: absolute; inset: 0; background: rgba(245, 184, 7, .22); }
 .square.selected::before { content: ""; position: absolute; inset: 0; box-shadow: inset 0 0 0 5px rgba(249, 212, 106, .85); background: rgba(245, 184, 7, .2); }
 .piece { position: relative; z-index: 2; font-family: "Arial Unicode MS", "Noto Sans Symbols 2", serif; font-size: clamp(32px, 7vw, 68px); line-height: 1; transform: translateY(-1%); user-select: none; }
+/* Pieces used to teleport. There is no DOM continuity between renders — the glyph simply
+   appears on a new square — so the arriving piece starts offset by however many squares it
+   travelled and animates home. One square is an eighth of the board, hence 12.5cqi. */
+.piece.arriving { animation: piece-arrives 140ms cubic-bezier(.22, .61, .36, 1); }
+@keyframes piece-arrives {
+    from { transform: translate(calc(var(--dx, 0) * 12.5cqi), calc(var(--dy, 0) * 12.5cqi + -1%)); }
+    to { transform: translateY(-1%); }
+}
+/* The captured piece is gone before the animation starts, so mark the square instead. */
+.square.last-move::before { animation: square-settles 220ms ease-out; }
+@keyframes square-settles { from { opacity: 0; } to { opacity: 1; } }
 .white-piece { color: #f5eee2; text-shadow: 0 1px 0 #6a5542, 0 3px 5px rgba(0, 0, 0, .55); }
 .black-piece { color: #211e1d; text-shadow: 0 1px 0 rgba(255, 255, 255, .18), 0 2px 3px rgba(0, 0, 0, .28); }
 .move-target { position: absolute; z-index: 3; width: 22%; height: 22%; border-radius: 50%; background: rgba(30, 24, 19, .4); pointer-events: none; }
@@ -286,6 +297,34 @@ summary { cursor: pointer; }
 .eval-graph-table table { width: 100%; border-collapse: collapse; margin-top: 8px; }
 .eval-graph-table th { padding: 4px 6px; color: #70747a; font: 600 8px/1 ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; text-align: left; border-bottom: 1px solid var(--line); }
 .eval-graph-table td { padding: 4px 6px; color: #a9a399; font: 500 10px/1.4 ui-monospace, monospace; font-variant-numeric: tabular-nums; border-bottom: 1px dotted #30343a; }
+
+/* Telemetry lives behind this. Kept for anyone who wants it, out of the way of
+   everyone who does not. */
+.under-the-hood { margin-top: 4px; }
+.under-the-hood > summary { color: #777c82; font: 600 9px/1.6 ui-monospace, monospace; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; }
+.under-the-hood .search-stats { margin: 14px 0; }
+.under-the-hood .eval-detail div span { color: #a9a399; font-size: 11px; }
+
+/* ── Review headline ──────────────────────────────────────────────────────────
+   The score and the best moment come first. Everything here was already computed
+   and thrown away; the review used to open with a list of the player's failures. */
+.review-score { display: flex; align-items: center; gap: 14px; padding: 4px 0 14px; border-bottom: 1px solid var(--line); }
+.review-score strong { font: 700 40px/1 ui-monospace, monospace; font-variant-numeric: tabular-nums; letter-spacing: -.03em; }
+.review-score strong span { font-size: 18px; opacity: .55; }
+.review-score .band-great { color: #7fd39a; }
+.review-score .band-good { color: var(--gold-bright); }
+.review-score .band-ok { color: #d99a2b; }
+.review-score .band-rough { color: #cf8a80; }
+.review-score-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.review-score-text span:first-child { color: #c8c1b8; font: 600 10px/1 ui-monospace, monospace; letter-spacing: .12em; text-transform: uppercase; }
+.review-score-text span:last-child { color: #85898e; font: 400 12px/1.4 Georgia, serif; }
+.review-share { margin-left: auto; align-self: flex-start; padding: 6px 10px; color: #bab3a9; border: 1px solid var(--line); background: transparent; cursor: pointer; font: 600 9px/1 ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; }
+.review-share:hover { color: var(--gold-bright); border-color: var(--gold-line); }
+
+.best-moment { padding: 13px 15px; border-left: 2px solid var(--gold-line); background: var(--gold-wash); }
+.best-moment h3 { margin: 0 0 6px; color: var(--gold-bright); font: 600 9px/1 ui-monospace, monospace; letter-spacing: .12em; text-transform: uppercase; }
+.best-moment p { margin: 0; color: var(--ink); font: 400 14px/1.6 Georgia, serif; }
+.best-moment strong { font: 600 13px/1 ui-monospace, monospace; }
 
 /* ── Game review ──────────────────────────────────────────────────────────── */
 .review-list { margin: 4px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 1px; background: var(--line); }

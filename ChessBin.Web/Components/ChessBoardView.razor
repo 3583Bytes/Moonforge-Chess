@@ -51,6 +51,30 @@
 
     [Parameter] public EventCallback<BoardSquare> OnSquareClick { get; set; }
 
+    /// <summary>Squares the last move came from and went to, so the arriving piece can slide.</summary>
+    [Parameter] public int LastFrom { get; set; } = -1;
+    [Parameter] public int LastTo { get; set; } = -1;
+
+    /// <summary>Changes once per move; forces the arriving piece to be a fresh element.</summary>
+    [Parameter] public int MoveKey { get; set; }
+
+    private bool IsArriving(BoardSquare square) =>
+        LastFrom >= 0 && LastTo >= 0 && square.Column + square.Row * 8 == LastTo;
+
+    /// <summary>
+    /// The offset the piece animates in from, in squares. A flipped board renders both axes in
+    /// reverse, so the visual direction flips with it.
+    /// </summary>
+    private string SlideFrom(BoardSquare square)
+    {
+        if (!IsArriving(square)) return "";
+
+        int sign = WhiteAtBottom ? 1 : -1;
+        int dx = ((LastFrom % 8) - (LastTo % 8)) * sign;
+        int dy = ((LastFrom / 8) - (LastTo / 8)) * sign;
+        return $"--dx: {dx}; --dy: {dy};";
+    }
+
     private bool ShowFileLabel(BoardSquare square) => WhiteAtBottom ? square.Row == 7 : square.Row == 0;
 
     private bool ShowRankLabel(BoardSquare square) => WhiteAtBottom ? square.Column == 0 : square.Column == 7;

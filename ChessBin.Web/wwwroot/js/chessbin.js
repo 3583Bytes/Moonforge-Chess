@@ -20,6 +20,16 @@ if ('serviceWorker' in navigator) {
     });
 }
 
+// Created on demand and reused. Browsers also start contexts suspended until a gesture,
+// so resume it whenever we are about to make a noise.
+window.chessBinAudio = () => {
+    const Context = window.AudioContext || window.webkitAudioContext;
+    if (!Context) return null;
+    if (!window.__chessBinCtx) window.__chessBinCtx = new Context();
+    if (window.__chessBinCtx.state === "suspended") window.__chessBinCtx.resume();
+    return window.__chessBinCtx;
+};
+
 window.chessBin = {
     copyText: async text => {
         if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(text);
@@ -35,17 +45,47 @@ window.chessBin = {
         window.history.replaceState({}, "", url);
         if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(url.href);
     },
-    playMoveSound: () => {
-        const Context = window.AudioContext || window.webkitAudioContext;
-        if (!Context) return;
-        const context = new Context();
-        const oscillator = context.createOscillator();
-        const gain = context.createGain();
-        oscillator.frequency.value = 430;
-        gain.gain.setValueAtTime(0.035, context.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.08);
-        oscillator.connect(gain).connect(context.destination);
-        oscillator.start();
-        oscillator.stop(context.currentTime + 0.08);
+    // One shared context. The previous version built a new AudioContext for every move,
+    // which browsers cap — after a handful of moves the sound simply stopped.
+    playSound: kind => {
+        const context = window.chessBinAudio();
+        if (!context) return;
+
+        const now = context.currentTime;
+        const note = (frequency, at, length, peak, type) => {
+            const oscillator = context.createOscillator();
+            const gain = context.createGain();
+            oscillator.type = type || "triangle";
+            oscillator.frequency.value = frequency;
+            gain.gain.setValueAtTime(0.0001, now + at);
+            gain.gain.exponentialRampToValueAtTime(peak, now + at + 0.012);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + at + length);
+            oscillator.connect(gain).connect(context.destination);
+            oscillator.start(now + at);
+            oscillator.stop(now + at + length + 0.02);
+        };
+
+        switch (kind) {
+            case "capture":                      // lower and blunter, so it lands
+                note(150, 0, 0.16, 0.075, "square");
+                note(90, 0.01, 0.13, 0.05);
+                break;
+            case "check":                        // rising, asks for attention
+                note(660, 0, 0.09, 0.05);
+                note(990, 0.07, 0.13, 0.05);
+                break;
+            case "mate":                         // falling and final
+                note(523, 0, 0.16, 0.055);
+                note(415, 0.14, 0.16, 0.055);
+                note(311, 0.28, 0.34, 0.06);
+                break;
+            case "castle":                       // two clicks, one for each piece
+                note(300, 0, 0.05, 0.045);
+                note(300, 0.08, 0.06, 0.045);
+                break;
+            default:                             // a quiet move should stay quiet
+                note(330, 0, 0.06, 0.04);
+                break;
+        }
     }
 };

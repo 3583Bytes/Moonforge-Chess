@@ -7,6 +7,7 @@ public sealed class ChessGameSession : IDisposable
 {
     public const string StartingFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
+
     private Engine _engine = null!;
     private CancellationTokenSource _searchCancellation = new();
     private readonly List<PlayedMove> _moves = [];
@@ -45,6 +46,10 @@ public sealed class ChessGameSession : IDisposable
     /// <summary>The position the game started from, so it can be replayed for review.</summary>
     public string InitialFen => _initialFen;
     public IReadOnlyList<PlayedMove> Moves => _moves;
+
+    /// <summary>The move that produced the position on screen, or null at the start.</summary>
+    public PlayedMove? LastMovePlayed => _currentPly > 0 ? _moves[_currentPly - 1] : null;
+
     public EngineSearchInfo? LastSearch { get; private set; }
     public bool LastMoveWasBook { get; private set; }
     public EvaluationBreakdown Evaluation { get; private set; }
@@ -299,6 +304,8 @@ public sealed class ChessGameSession : IDisposable
             LastSearch = result.Info;
             LastMoveWasBook = result.FromBook;
             LastSearchElapsed = stopwatch.Elapsed;
+
+
             SettleTurnClock();
             ApplyCoordinateMove(result.BestMove);
             RecordAppliedMove(result.BestMove);
@@ -516,7 +523,22 @@ public sealed class ChessGameSession : IDisposable
     private sealed record PendingMove(int FromColumn, int FromRow, int ToColumn, int ToRow);
 }
 
-public sealed record PlayedMove(string Uci, string Label, int FromIndex, int ToIndex);
+public sealed record PlayedMove(string Uci, string Label, int FromIndex, int ToIndex)
+{
+    /// <summary>
+    /// Which sound this move should make. The notation already says: the engine appends "+"
+    /// or "#" when it applies the move, and algebraic notation carries "x" for a capture and
+    /// "O-O" for castling — so nothing new has to be threaded through from the engine.
+    /// </summary>
+    public string SoundKind => Label switch
+    {
+        _ when Label.EndsWith('#') => "mate",
+        _ when Label.EndsWith('+') => "check",
+        _ when Label.Contains('x') => "capture",
+        _ when Label.StartsWith("O-O", StringComparison.Ordinal) => "castle",
+        _ => "move",
+    };
+}
 
 public sealed record TimeControl(string Label, long InitialMilliseconds, long IncrementMilliseconds)
 {

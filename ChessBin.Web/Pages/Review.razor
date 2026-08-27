@@ -50,7 +50,7 @@
                         @_game.Moves.Count moves read@(string.IsNullOrWhiteSpace(_game.Result) ? "" : $", result {_game.Result}").
                         @if (!_game.StartsFromStandardPosition)
                         {
-                            <text>Starting from the position in the game's FEN tag.</text>
+                            <text>This game starts from a set-up position rather than the beginning.</text>
                         }
                     </p>
                 }

@@ -19,14 +19,32 @@ else if (Review is null)
     <p class="position-message">See what every move cost — and why, in the engine's own terms.</p>
     <button class="primary-button" type="button" @onclick="OnStart">@StartLabel</button>
 }
-else if (Review.Notable.Count == 0)
-{
-    <EvalGraph Review="Review" OnSelectPly="OnSelectPly" />
-    <p class="position-message">Nothing stood out — no move cost more than @(GameReviewer.InaccuracyLoss / 100d) of a pawn.</p>
-}
 else
 {
+    @* Lead with what went right. Everything here was already being computed and discarded. *@
+    <div class="review-score">
+        <strong class="@AccuracyBand">@Review.Accuracy<span>%</span></strong>
+        <div class="review-score-text">
+            <span>accuracy</span>
+            <span>@Review.BestMoves move@(Review.BestMoves == 1 ? "" : "s") the engine would have played</span>
+        </div>
+        <button class="review-share" type="button" @onclick="ShareAsync" title="Copy a summary">@_shareLabel</button>
+    </div>
+
+    @if (Review.BestMoment is ReviewedMove moment)
+    {
+        <div class="best-moment">
+            <h3>Your best moment</h3>
+            <p><strong>@moment.Reference</strong> — that swung the game @moment.WinGain.ToString("0") points your way.</p>
+        </div>
+    }
+
     <EvalGraph Review="Review" OnSelectPly="OnSelectPly" />
+
+    @if (Review.Notable.Count == 0)
+    {
+        <p class="position-message">Nothing to pick at either — no move cost you more than @(GameReviewer.InaccuracyLoss / 100d) of a pawn.</p>
+    }
 
     <ol class="review-list">
         @foreach (ReviewedMove m in Review.Notable)
@@ -55,6 +73,36 @@ else
     [Parameter] public string SelectHint { get; set; } = "Show this position on the board";
     [Parameter] public EventCallback OnStart { get; set; }
     [Parameter] public EventCallback<int> OnSelectPly { get; set; }
+
+    [Inject] private IJSRuntime Js { get; set; } = null!;
+
+    private string _shareLabel = "Share";
+
+    private string AccuracyBand => Review is null ? ""
+        : Review.Accuracy >= 90 ? "band-great"
+        : Review.Accuracy >= 70 ? "band-good"
+        : Review.Accuracy >= 50 ? "band-ok"
+        : "band-rough";
+
+    private async Task ShareAsync()
+    {
+        await Js.InvokeVoidAsync("chessBin.copyText", ShareText());
+        _shareLabel = "Copied";
+    }
+
+    /// <summary>Something worth posting: the score first, the damage second.</summary>
+    private string ShareText()
+    {
+        if (Review is null) return "";
+
+        var parts = new List<string> { $"{Review.Accuracy}% accuracy" };
+        if (Review.BestMoves > 0) parts.Add($"{Review.BestMoves} best moves");
+        string faults = Tally;
+        if (faults != "clean game") parts.Add(faults);
+
+        string moment = Review.BestMoment is ReviewedMove m ? $"\nBest moment: {m.Reference}" : "";
+        return $"ChessBin game review\n{string.Join(" · ", parts)}{moment}\nhttps://chessbin.com/review";
+    }
 
     private double Percent => Total == 0 ? 0 : Math.Clamp(Done * 100d / Total, 2, 100);
 

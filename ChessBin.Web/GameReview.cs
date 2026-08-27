@@ -22,6 +22,8 @@ public sealed record ReviewedMove(
     ChessPieceColor Mover,
     int Loss,
     int ScoreAfter,
+    double Accuracy,
+    double WinGain,
     string FenAfter,
     MoveVerdict Verdict,
     IReadOnlyList<TermDelta> Terms,
@@ -46,6 +48,38 @@ public sealed record GameReviewResult(
 {
     public int Count(MoveVerdict v) => Moves.Count(m => m.IsHumanMove && m.Verdict == v);
     public int HumanMoves => Moves.Count(m => m.IsHumanMove);
+
+    /// <summary>How accurately the player played, 0–100. Zero moves means no score.</summary>
+    public int Accuracy
+    {
+        get
+        {
+            var mine = Moves.Where(m => m.IsHumanMove).ToArray();
+            return mine.Length == 0 ? 0 : (int)Math.Round(mine.Average(m => m.Accuracy));
+        }
+    }
+
+    /// <summary>Moves the engine would have played itself.</summary>
+    public int BestMoves => Count(MoveVerdict.Best);
+
+    /// <summary>
+    /// The move worth being pleased about: the engine's own choice that gained the most, so
+    /// there is something to celebrate and not only mistakes to apologise for.
+    /// </summary>
+    public ReviewedMove? BestMoment
+    {
+        get
+        {
+            var mine = Moves.Where(m => m.IsHumanMove && m.WinGain >= MinCelebratedGain).ToArray();
+            if (mine.Length == 0) return null;
+
+            var agreed = mine.Where(m => m.Verdict == MoveVerdict.Best).ToArray();
+            return (agreed.Length > 0 ? agreed : mine).MaxBy(m => m.WinGain);
+        }
+    }
+
+    /// <summary>Below this a "best moment" is noise, and praising noise cheapens the praise.</summary>
+    private const double MinCelebratedGain = 3.0;
 }
 
 /// <summary>
@@ -79,6 +113,20 @@ public static class GameReviewer
 
     /// <summary>How far down the engine's expected line the attribution looks.</summary>
     private const int MaxPvPlies = 6;
+
+    /// <summary>
+    /// Centipawns to a winning percentage. This is the logistic Lichess uses, kept rather than
+    /// invented so the number means the same thing as the one players already know.
+    /// </summary>
+    public static double WinPercent(int centipawns) =>
+        50 + 50 * (2 / (1 + Math.Exp(-0.00368208 * centipawns)) - 1);
+
+    /// <summary>
+    /// How accurate a single move was, from the winning percentage it gave up. Also the
+    /// standard shape: a move that loses nothing scores 100, and the penalty grows sharply.
+    /// </summary>
+    public static double MoveAccuracy(double winPercentBefore, double winPercentAfter) =>
+        Math.Clamp(103.1668 * Math.Exp(-0.04354 * (winPercentBefore - winPercentAfter)) - 3.1669, 0, 100);
 
     /// <summary>Default number of the player's worst moments to surface.</summary>
     public const int DefaultNotable = 5;
@@ -165,6 +213,13 @@ public static class GameReviewer
 
             MoveVerdict verdict = matchedEngine ? MoveVerdict.Best : VerdictFor(loss);
 
+            double winBefore = WinPercent(ScoreForHuman(i));
+            double winAfter = WinPercent(ScoreForHuman(i + 1));
+            bool mine = mover == humanColor;
+            // Accuracy only means anything for the player; the engine is not being marked.
+            double accuracy = mine ? MoveAccuracy(winBefore, winAfter) : 0;
+            double gain = mine ? winAfter - winBefore : 0;
+
             // Only moves that actually cost something get an attribution and an alternative.
             // Second-guessing a sound move is noise, and the attribution follows the engine's own
             // expected continuation rather than whatever happened next in the game — attributing
@@ -186,6 +241,8 @@ public static class GameReviewer
                 Mover: mover,
                 Loss: Math.Max(0, loss),
                 ScoreAfter: ScoreForHuman(i + 1),
+                Accuracy: accuracy,
+                WinGain: gain,
                 FenAfter: i < fens.Count ? fens[i] : string.Empty,
                 Verdict: verdict,
                 Terms: terms,

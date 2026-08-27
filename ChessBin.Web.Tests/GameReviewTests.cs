@@ -164,6 +164,103 @@ public sealed class GameReviewTests
         });
     }
 
+    // ── accuracy and celebration ────────────────────────────────────────────────
+
+    [Test]
+    public void TheAccuracyCurveBehavesLikeTheOneOnEveryOtherChessSite()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(GameReviewer.WinPercent(0), Is.EqualTo(50).Within(0.01), "a level position is a coin flip");
+            Assert.That(GameReviewer.WinPercent(300), Is.GreaterThan(70));
+            Assert.That(GameReviewer.WinPercent(-300), Is.LessThan(30));
+            Assert.That(GameReviewer.WinPercent(2000), Is.GreaterThan(99));
+            Assert.That(GameReviewer.WinPercent(100), Is.EqualTo(100 - GameReviewer.WinPercent(-100)).Within(0.01),
+                "the curve has to be symmetric or one colour is scored more harshly");
+
+            // Giving nothing away is full marks; giving up more scores progressively worse.
+            Assert.That(GameReviewer.MoveAccuracy(60, 60), Is.EqualTo(100).Within(0.5));
+            Assert.That(GameReviewer.MoveAccuracy(60, 70), Is.EqualTo(100), "improving cannot score above full marks");
+            Assert.That(GameReviewer.MoveAccuracy(60, 55), Is.LessThan(100));
+            Assert.That(GameReviewer.MoveAccuracy(60, 40), Is.LessThan(GameReviewer.MoveAccuracy(60, 55)));
+            Assert.That(GameReviewer.MoveAccuracy(90, 10), Is.InRange(0, 15), "throwing a won game away scores badly");
+        });
+    }
+
+    [Test]
+    public async Task AGameWithABlunderScoresLowerThanAQuietOne()
+    {
+        List<PlayedMove> quiet =
+        [
+            Mv("e2e4", "e4"), Mv("e7e5", "e5"),
+            Mv("g1f3", "Nf3"), Mv("b8c6", "Nc6"),
+            Mv("f1c4", "Bc4"), Mv("f8c5", "Bc5"),
+        ];
+
+        var sound = await GameReviewer.ReviewAsync(Start, quiet, ChessPieceColor.White, searchDeadlineMs: 200);
+        var thrown = await GameReviewer.ReviewAsync(Start, QueenLoss(), ChessPieceColor.White, searchDeadlineMs: 200);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(sound.Accuracy, Is.InRange(0, 100));
+            Assert.That(thrown.Accuracy, Is.InRange(0, 100));
+            Assert.That(sound.Accuracy, Is.GreaterThan(thrown.Accuracy),
+                "a sensible opening must score better than handing over a queen");
+            Assert.That(sound.Accuracy, Is.GreaterThan(70), "nothing in the quiet game deserves a poor score");
+        });
+    }
+
+    [Test]
+    public async Task TheReviewCanCelebrateAndNotOnlyCorrect()
+    {
+        var review = await GameReviewer.ReviewAsync(Start, QueenLoss(), ChessPieceColor.White, searchDeadlineMs: 200);
+
+        Assert.Multiple(() =>
+        {
+            // The whole point: something other than a list of failures is available.
+            Assert.That(review.BestMoves, Is.GreaterThan(0), "moves the engine agreed with should be counted");
+            Assert.That(review.Accuracy, Is.GreaterThan(0));
+            Assert.That(review.Moves.Where(m => m.IsHumanMove).All(m => m.Accuracy is >= 0 and <= 100), Is.True);
+            Assert.That(review.Moves.Where(m => !m.IsHumanMove).All(m => m.Accuracy == 0), Is.True,
+                "the engine is not being marked");
+        });
+    }
+
+    [Test]
+    public async Task ABestMomentIsOnlyClaimedWhenSomethingActuallyImproved()
+    {
+        var review = await GameReviewer.ReviewAsync(Start, QueenLoss(), ChessPieceColor.White, searchDeadlineMs: 200);
+
+        if (review.BestMoment is ReviewedMove moment)
+        {
+            Assert.Multiple(() =>
+            {
+                Assert.That(moment.IsHumanMove, Is.True, "celebrating the engine's move would be absurd");
+                Assert.That(moment.WinGain, Is.GreaterThanOrEqualTo(3.0), "praising noise cheapens the praise");
+            });
+        }
+        else
+        {
+            Assert.Pass("no move gained enough to celebrate, which is a legitimate outcome");
+        }
+    }
+
+    [Test]
+    public async Task AccuracyIsTheSameGameWhicheverSideIsScored()
+    {
+        var moves = QueenLoss();
+        var asWhite = await GameReviewer.ReviewAsync(Start, moves, ChessPieceColor.White, searchDeadlineMs: 200);
+        var asBlack = await GameReviewer.ReviewAsync(Start, moves, ChessPieceColor.Black, searchDeadlineMs: 200);
+
+        Assert.Multiple(() =>
+        {
+            // White threw a queen away, so Black's play should mark higher on the same game.
+            Assert.That(asBlack.Accuracy, Is.GreaterThan(asWhite.Accuracy));
+            Assert.That(asWhite.HumanMoves, Is.EqualTo(3));
+            Assert.That(asBlack.HumanMoves, Is.EqualTo(3));
+        });
+    }
+
     [Test]
     public async Task AnEmptyGame_ReviewsToNothingRatherThanThrowing()
     {
