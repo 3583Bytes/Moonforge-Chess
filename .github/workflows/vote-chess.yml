@@ -46,14 +46,27 @@ jobs:
           dotnet-version: "10.0.x"
 
       - name: Run the referee
+        env:
+          # Votes are cast on the site and collected by the Cloudflare Worker; this is how the
+          # referee reads them. Without the secret the Worker refuses, which is the safe
+          # failure: the referee changes nothing rather than playing on no votes.
+          VOTE_API: https://chessbin-api.3583bytes.workers.dev
+          VOTE_API_SECRET: ${{ secrets.REFEREE_SECRET }}
         run: |
+          if [ -z "$VOTE_API_SECRET" ]; then
+            echo "::error::REFEREE_SECRET is not set — add it under Settings → Secrets → Actions."
+            exit 1
+          fi
+
           dotnet run --project tools/VoteReferee -c Release -- \
             "${{ inputs.command || 'tally' }}" \
             --state ChessBin.Web/wwwroot/vote/state.json \
             --repo "${{ github.repository }}" \
             --token "${{ secrets.GITHUB_TOKEN }}" \
             --issue "${{ inputs.issue || '0' }}" \
-            --color "${{ inputs.color || 'White' }}"
+            --color "${{ inputs.color || 'White' }}" \
+            --api "$VOTE_API" \
+            --api-secret "$VOTE_API_SECRET"
 
       - name: Commit the new position
         run: |

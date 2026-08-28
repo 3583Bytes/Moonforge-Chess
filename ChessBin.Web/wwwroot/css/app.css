@@ -243,6 +243,45 @@ summary { cursor: pointer; }
 .vote-moves .by-us strong { color: var(--gold-bright); }
 .vote-moves .by-engine strong { color: var(--cyan-text); }
 
+/* Voting buttons. Each is a bar chart cell and a control at once: the fill shows the share
+   of the vote, so the panel reads at a glance before anyone parses the numbers. The fill sits
+   behind the text and is aria-hidden — the count beside it carries the same information for a
+   screen reader, and colour is never the only signal. */
+.vote-options { margin: 4px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 1px; background: var(--line); }
+.vote-option {
+    position: relative; isolation: isolate; width: 100%; padding: 11px 12px; border: 0;
+    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+    background: #12151a; color: var(--ink); text-align: left; cursor: pointer;
+}
+.vote-option:hover:not(:disabled) { background: #171b21; }
+.vote-option:disabled { cursor: default; }
+.vote-option:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
+
+.vote-bar {
+    position: absolute; inset: 0 auto 0 0; z-index: -1;
+    background: var(--gold-wash-strong); transition: width .28s ease;
+}
+/* The chosen row is marked at the left edge, never at the bar's edge. A border on the bar
+   itself lands wherever the vote share happens to put it — which, at 29%, drew a hard gold
+   line straight through the words "your vote". The left edge is always in the same place. */
+.vote-option.chosen { box-shadow: inset 2px 0 0 var(--gold); }
+.vote-option.chosen .vote-bar { background: rgba(245, 184, 7, .2); }
+.vote-move { font: 600 12.5px/1 ui-monospace, monospace; }
+.vote-option.chosen .vote-move { color: var(--gold-bright); }
+.vote-count { color: #85898e; font: 500 11px/1 ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+.vote-option.chosen .vote-count { color: var(--gold-bright); }
+
+/* The chosen move is marked in text as well as colour, for anyone who cannot see the fill. */
+.vote-option.chosen .vote-count::before { content: "your vote · "; color: var(--muted); font-weight: 500; }
+
+.vote-message { margin: 12px 0 0; padding: 10px 12px; font: 400 13px/1.55 Georgia, serif; }
+.vote-message.confirmed { color: #ddd7ce; border-left: 2px solid var(--gold); background: var(--gold-wash); }
+.vote-message.problem { color: #f0d6d2; border-left: 2px solid #d4685c; background: rgba(212, 104, 92, .1); }
+
+@media (prefers-reduced-motion: reduce) {
+    .vote-bar { transition: none; }
+}
+
 /* ── PGN import ───────────────────────────────────────────────────────────── */
 .paste-panel { padding: 20px; border: 1px solid var(--line); background: rgba(20, 23, 28, .88); display: grid; gap: 14px; }
 .paste-panel + .paste-panel { margin-top: 16px; }
@@ -304,6 +343,10 @@ summary { cursor: pointer; }
 .under-the-hood > summary { color: #777c82; font: 600 9px/1.6 ui-monospace, monospace; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; }
 .under-the-hood .search-stats { margin: 14px 0; }
 .under-the-hood .eval-detail div span { color: #a9a399; font-size: 11px; }
+
+.progress-section { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.progress-section .section-heading { margin-bottom: 0; }
+.restore-warning { color: #d99a2b !important; }
 
 /* ── Review headline ──────────────────────────────────────────────────────────
    The score and the best moment come first. Everything here was already computed
@@ -402,9 +445,16 @@ summary { cursor: pointer; }
 
 @media (max-width: 620px) {
     .site-shell { width: min(100% - 20px, 540px); }
-    .masthead { height: 64px; }
+    /* Five links cannot share a row with the wordmark on a phone. Keeping them on one row
+       and letting it scroll hid the last two entirely, with nothing to suggest they were
+       there — so the nav takes a row of its own and every link stays visible. */
+    .masthead { height: auto; flex-wrap: wrap; gap: 6px; padding: 10px 0; }
     .engine-badge { display: none; }
-    .site-nav a { padding: 7px 8px; font-size: 9px; letter-spacing: .08em; }
+    /* Spread across the row it now owns; still scrollable as a backstop for the narrowest
+       phones, where even one row of five will not fit. */
+    .site-nav { width: 100%; min-width: 0; justify-content: space-between; gap: 2px; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
+    .site-nav::-webkit-scrollbar { display: none; }
+    .site-nav a { flex: 0 0 auto; padding: 7px 8px; font-size: 9px; letter-spacing: .08em; }
     .hero { grid-template-columns: 1fr; gap: 20px; padding: 36px 0 28px; }
     .hero h1 { font-size: clamp(37px, 12vw, 52px); }
     .intro { font-size: 14px; }

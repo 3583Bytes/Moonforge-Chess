@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ChessBin.Web\ChessBin.Web.csproj" />
+    <ProjectReference Include="..\ChessBin.Online\ChessBin.Online.csproj" />
   </ItemGroup>
 
 </Project>

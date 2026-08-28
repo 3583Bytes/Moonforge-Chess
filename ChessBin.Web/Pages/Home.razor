@@ -201,6 +201,35 @@
                 </div>
             </section>
 
+            <section class="panel-section progress-section">
+                <div class="section-heading"><h2>Your progress</h2><span>this device only</span></div>
+                <p class="position-message">
+                    Streaks and settings are kept in this browser. Copy the code to carry them to
+                    another device — there is no account, so this is the only way across.
+                </p>
+                <div class="position-actions">
+                    <button type="button" @onclick="CopyProgressAsync">@_progressCopyLabel</button>
+                    <button type="button" @onclick="() => _showRestore = !_showRestore">Restore…</button>
+                </div>
+
+                @if (_showRestore)
+                {
+                    <input class="fen-input" @bind="_progressCode" aria-label="Progress code"
+                           placeholder="Paste a progress code" />
+                    <p class="position-message restore-warning">
+                        Restoring replaces the streak and settings in this browser.
+                    </p>
+                    <div class="position-actions">
+                        <button type="button" @onclick="RestoreProgressAsync">Replace my progress</button>
+                    </div>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(_progressMessage))
+                {
+                    <p class="position-message">@_progressMessage</p>
+                }
+            </section>
+
             <section class="panel-section settings-section">
                 <div class="section-heading"><h2>Board settings</h2><span>Saved locally</span></div>
                 <label class="toggle"><input type="checkbox" @bind="_showCoordinates" @bind:after="SaveSettingsAsync" /> Coordinates</label>
@@ -276,6 +305,10 @@
     private string _copyLabel = "Copy position";
     private string _fenInput = string.Empty;
     private string _positionMessage = string.Empty;
+    private string _progressCode = string.Empty;
+    private string _progressMessage = string.Empty;
+    private string _progressCopyLabel = "Copy my code";
+    private bool _showRestore;
     private bool _showCoordinates = true;
     private bool _soundEnabled;
     private bool _lightBoard;
@@ -338,6 +371,41 @@
         }
     }
 
+
+    private async Task CopyProgressAsync()
+    {
+        string code = await PlayerData.ExportAsync(Js);
+        ProgressCodeResult check = PlayerData.Decode(code);
+
+        if (!check.Success)
+        {
+            // Nothing worth carrying yet — say so rather than handing over a code that
+            // will be rejected on the other device.
+            _progressMessage = "There is nothing to carry across yet. Play a game or solve a puzzle first.";
+            return;
+        }
+
+        await Js.InvokeVoidAsync("chessBin.copyText", code);
+        _progressCopyLabel = "Copied";
+        _progressMessage = "Code copied. Paste it into ChessBin on your other device.";
+    }
+
+    private async Task RestoreProgressAsync()
+    {
+        ProgressCodeResult result = PlayerData.Decode(_progressCode);
+        if (!result.Success)
+        {
+            _progressMessage = result.Error!;
+            return;
+        }
+
+        await PlayerData.ImportAsync(Js, result.Entries!);
+        await ApplyStoredSettingsAsync();
+
+        _progressCode = string.Empty;
+        _showRestore = false;
+        _progressMessage = $"Restored {result.Entries!.Count} item(s). Your streak and settings now match that device.";
+    }
 
     private async Task StartNewGameAsync()
     {
@@ -421,20 +489,7 @@
     {
         if (!firstRender || _initialized) return;
         _initialized = true;
-        string? json = await Js.InvokeAsync<string?>("chessBin.getSettings");
-        if (!string.IsNullOrWhiteSpace(json))
-        {
-            var settings = JsonSerializer.Deserialize<ChessBinSettings>(json);
-            if (settings is not null)
-            {
-                _selectedSide = settings.Side;
-                _selectedDifficulty = settings.Difficulty;
-                _selectedTimeControl = settings.TimeControl;
-                _showCoordinates = settings.ShowCoordinates;
-                _soundEnabled = settings.SoundEnabled;
-                _lightBoard = settings.LightBoard;
-            }
-        }
+        await ApplyStoredSettingsAsync();
 
         string? fen = await Js.InvokeAsync<string?>("chessBin.getFenFromUrl");
         if (!string.IsNullOrWhiteSpace(fen))
@@ -443,6 +498,32 @@
             LoadFen();
         }
         await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>Reads the stored settings onto the page. Also used after restoring a code.</summary>
+    private async Task ApplyStoredSettingsAsync()
+    {
+        string? json = await Js.InvokeAsync<string?>("chessBin.getSettings");
+        if (string.IsNullOrWhiteSpace(json)) return;
+
+        ChessBinSettings? settings;
+        try
+        {
+            settings = JsonSerializer.Deserialize<ChessBinSettings>(json);
+        }
+        catch (Exception)
+        {
+            return;   // unreadable settings should never stop the page loading
+        }
+
+        if (settings is null) return;
+
+        _selectedSide = settings.Side;
+        _selectedDifficulty = settings.Difficulty;
+        _selectedTimeControl = settings.TimeControl;
+        _showCoordinates = settings.ShowCoordinates;
+        _soundEnabled = settings.SoundEnabled;
+        _lightBoard = settings.LightBoard;
     }
 
     private async Task SaveSettingsAsync()

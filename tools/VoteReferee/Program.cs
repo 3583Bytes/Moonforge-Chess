@@ -14,8 +14,6 @@ namespace ChessBin.Tools.VoteReferee;
 /// </summary>
 internal static class Program
 {
-    private const string BotLogin = "github-actions[bot]";
-
     private static async Task<int> Main(string[] args)
     {
         var options = Options.Parse(args);
@@ -53,6 +51,10 @@ internal static class Program
         };
 
         await WriteAsync(options.StatePath, next);
+
+        if (!await OpenRoundAsync(options, next))
+            return Fail("the game state was written but the vote server would not open a round");
+
         Console.WriteLine($"Started game {next.Game}: community plays {next.CommunityColor}, " +
                           $"first deadline {next.DeadlineUtc}.");
         return 0;
@@ -79,9 +81,13 @@ internal static class Program
             return 0;
         }
 
-        DateTimeOffset windowStart = LastTallyAt(state, options);
-        IReadOnlyList<VoteComment> comments = await FetchCommentsAsync(options);
-        TallyResult tally = VoteChess.Tally(state.Fen, comments, BotLogin, windowStart);
+        IReadOnlyList<string> candidates = VoteChess.LegalMoves(state.Fen);
+        IReadOnlyDictionary<string, string>? ballots = await FetchBallotsAsync(options);
+
+        if (ballots is null)
+            return Fail("could not read the ballots; leaving the game untouched so no vote is lost");
+
+        TallyResult tally = VoteChess.Tally(ballots, candidates);
 
         if (!tally.HasWinner)
         {
@@ -92,6 +98,9 @@ internal static class Program
                 DeadlineUtc = options.Now.AddHours(options.Hours).ToString("o", CultureInfo.InvariantCulture),
             };
             await WriteAsync(options.StatePath, extended);
+            if (!await OpenRoundAsync(options, extended))
+                return Fail("could not extend the round on the vote server");
+
             await CommentAsync(options, $"No votes this round — voting stays open until {extended.DeadlineUtc}.");
             Console.WriteLine("No votes; deadline extended.");
             return 0;
@@ -102,6 +111,12 @@ internal static class Program
             return Fail($"the winning vote '{tally.Winner}' is no longer legal in {state.Fen}");
 
         await WriteAsync(options.StatePath, played.State);
+
+        // Open the next round before announcing this one, so nobody reads the summary and
+        // finds nothing to vote on. A finished game has no next round.
+        if (!played.State.IsFinished && !await OpenRoundAsync(options, played.State))
+            return Fail("the move was played but the next round could not be opened");
+
         await CommentAsync(options, Summary(tally, played.EngineReply, played.State));
         Console.WriteLine($"Played {tally.Winner} ({tally.Counts[0].Votes} of {tally.Voters} votes)" +
                           (played.EngineReply.Length > 0 ? $"; Moonforge replied {played.EngineReply}." : "."));
@@ -126,21 +141,133 @@ internal static class Program
         sb.AppendLine();
         sb.AppendLine(state.IsFinished
             ? $"That ends the game — {state.Result}."
-            : $"Voting is open again until {state.DeadlineUtc}. Reply with a move in algebraic notation, for example `Nf6`.");
+            : $"Voting is open again until {state.DeadlineUtc}. Vote on the board — this thread is for discussion.");
         sb.AppendLine();
         sb.AppendLine("Board: https://chessbin.com/vote/");
         return sb.ToString();
     }
 
-    /// <summary>Votes only count from the bot's last post, so a round never reuses old comments.</summary>
-    private static DateTimeOffset LastTallyAt(VoteState state, Options options) =>
-        state.Deadline is DateTimeOffset deadline
-            ? deadline.AddHours(-options.Hours)
-            : options.Now.AddHours(-options.Hours);
+    // ── the vote server ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Reads the ballots Cloudflare collected. Returns null on any failure — never an empty
+    /// tally — because "nobody voted" and "we could not ask" must lead to different actions:
+    /// the first extends the round, the second must change nothing at all.
+    /// </summary>
+    private static async Task<IReadOnlyDictionary<string, string>?> FetchBallotsAsync(Options options)
+    {
+        if (options.Api.Length == 0)
+        {
+            Console.Error.WriteLine("no --api given; there is nowhere to read votes from");
+            return null;
+        }
+
+        try
+        {
+            using HttpClient client = ApiClient(options);
+            using HttpResponseMessage response = await client.GetAsync("vote/round");
+
+            if (!response.IsSuccessStatusCode)
+            {
+                Console.Error.WriteLine($"the vote server returned {(int)response.StatusCode} for the ballots" +
+                    (response.StatusCode == System.Net.HttpStatusCode.Forbidden
+                        ? " — check --api-secret matches the Worker's REFEREE_SECRET"
+                        : ""));
+                return null;
+            }
+
+            using JsonDocument document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            if (!document.RootElement.TryGetProperty("ballots", out JsonElement ballots))
+            {
+                Console.Error.WriteLine("the vote server's reply had no ballots in it");
+                return null;
+            }
+
+            var result = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (JsonProperty ballot in ballots.EnumerateObject())
+            {
+                if (ballot.Value.GetString() is string san && san.Length > 0) result[ballot.Name] = san;
+            }
+
+            Console.WriteLine($"read {result.Count} ballot(s) from the vote server.");
+            return result;
+        }
+        catch (Exception exception) when (exception is HttpRequestException or JsonException or TaskCanceledException)
+        {
+            Console.Error.WriteLine($"could not reach the vote server: {exception.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Publishes the ballot for the position now on the board and clears the previous round.
+    /// The candidates are every legal move, so the community can play anything the rules
+    /// allow — the server checks ballots against this list, which is the only reason it can
+    /// accept votes without knowing anything about chess.
+    /// </summary>
+    private static async Task<bool> OpenRoundAsync(Options options, VoteState state)
+    {
+        if (options.Api.Length == 0) return false;
+
+        IReadOnlyList<string> candidates = VoteChess.LegalMoves(state.Fen);
+        if (candidates.Count == 0)
+        {
+            Console.Error.WriteLine($"no legal moves in {state.Fen}; not opening a round");
+            return false;
+        }
+
+        if (state.Deadline is not DateTimeOffset deadline)
+        {
+            Console.Error.WriteLine("the state has no deadline; not opening a round");
+            return false;
+        }
+
+        try
+        {
+            using HttpClient client = ApiClient(options);
+            var payload = new StringContent(
+                JsonSerializer.Serialize(new
+                {
+                    // Rounds count the community's turns, not plies — the engine's reply is
+                    // part of the same round, so counting history entries would skip every
+                    // other number.
+                    round = state.History.Count(move => move.IsCommunity) + 1,
+                    candidates,
+                    closesAt = deadline.ToUnixTimeMilliseconds(),
+                }),
+                Encoding.UTF8,
+                "application/json");
+
+            using HttpResponseMessage response = await client.PostAsync("vote/next", payload);
+            if (!response.IsSuccessStatusCode)
+            {
+                Console.Error.WriteLine($"the vote server returned {(int)response.StatusCode} opening the round");
+                return false;
+            }
+
+            Console.WriteLine($"opened a round with {candidates.Count} candidate move(s), closing {deadline:u}.");
+            return true;
+        }
+        catch (Exception exception) when (exception is HttpRequestException or JsonException or TaskCanceledException)
+        {
+            Console.Error.WriteLine($"could not reach the vote server: {exception.Message}");
+            return false;
+        }
+    }
+
+    private static HttpClient ApiClient(Options options)
+    {
+        string root = options.Api.EndsWith('/') ? options.Api : options.Api + "/";
+        var client = new HttpClient { BaseAddress = new Uri(root), Timeout = TimeSpan.FromSeconds(30) };
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", options.ApiSecret);
+        return client;
+    }
 
     // ── GitHub ──────────────────────────────────────────────────────────────────
+    // Votes no longer come from here — the thread is for discussion, and the referee only
+    // posts the round summary to it.
 
-    private static HttpClient Client(Options options)
+    private static HttpClient GitHubClient(Options options)
     {
         var client = new HttpClient { BaseAddress = new Uri("https://api.github.com/") };
         client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("chessbin-vote-referee", "1.0"));
@@ -148,42 +275,6 @@ internal static class Program
         if (options.Token.Length > 0)
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", options.Token);
         return client;
-    }
-
-    private static async Task<IReadOnlyList<VoteComment>> FetchCommentsAsync(Options options)
-    {
-        if (options.Issue <= 0) return [];
-
-        using HttpClient client = Client(options);
-        var all = new List<VoteComment>();
-
-        for (int page = 1; page <= 10; page++)
-        {
-            string url = $"repos/{options.Repo}/issues/{options.Issue}/comments?per_page=100&page={page}";
-            using HttpResponseMessage response = await client.GetAsync(url);
-            if (!response.IsSuccessStatusCode)
-            {
-                Console.Error.WriteLine($"GitHub returned {(int)response.StatusCode} for {url}");
-                break;
-            }
-
-            using JsonDocument document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-            JsonElement.ArrayEnumerator items = document.RootElement.EnumerateArray();
-            int count = 0;
-
-            foreach (JsonElement item in items)
-            {
-                count++;
-                string author = item.GetProperty("user").GetProperty("login").GetString() ?? "";
-                string body = item.GetProperty("body").GetString() ?? "";
-                DateTimeOffset created = item.GetProperty("created_at").GetDateTimeOffset();
-                all.Add(new VoteComment(author, body, created));
-            }
-
-            if (count < 100) break;
-        }
-
-        return all;
     }
 
     private static async Task CommentAsync(Options options, string body)
@@ -194,7 +285,7 @@ internal static class Program
             return;
         }
 
-        using HttpClient client = Client(options);
+        using HttpClient client = GitHubClient(options);
         var payload = new StringContent(
             JsonSerializer.Serialize(new { body }), Encoding.UTF8, "application/json");
 
@@ -227,6 +318,8 @@ internal static class Program
         public string Token = "";
         public int Issue;
         public int Hours = 24;
+        public string Api = "";
+        public string ApiSecret = "";
         public string CommunityColor = "White";
         public DateTimeOffset Now = DateTimeOffset.UtcNow;
 
@@ -245,6 +338,8 @@ internal static class Program
                     case "--token": o.Token = Next(); break;
                     case "--issue": o.Issue = int.Parse(Next()); break;
                     case "--hours": o.Hours = int.Parse(Next()); break;
+                    case "--api": o.Api = Next(); break;
+                    case "--api-secret": o.ApiSecret = Next(); break;
                     case "--color": o.CommunityColor = Next(); break;
                     case "--now": o.Now = DateTimeOffset.Parse(Next(), CultureInfo.InvariantCulture); break;
                     default:
@@ -256,6 +351,12 @@ internal static class Program
             if (o.Command == "start" && o.Issue <= 0)
             {
                 Console.Error.WriteLine("start needs --issue, the voting thread's number");
+                return null;
+            }
+
+            if (o.Api.Length > 0 && o.ApiSecret.Length == 0)
+            {
+                Console.Error.WriteLine("--api needs --api-secret, the Worker's REFEREE_SECRET");
                 return null;
             }
 

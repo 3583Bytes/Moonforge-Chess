@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The rules a server has to enforce for a game between two people, with no I/O and no
+    ambient clock. Whatever transport or host is eventually chosen, this part is identical —
+    so it is built first and separately, and it is where correctness has to live: if the
+    client owns legality or the clock, either player can cheat.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>ChessBin.Online</AssemblyName>
+    <RootNamespace>ChessBin.Online</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../ChessCoreEngine/ChessCoreEngine.csproj" />
+  </ItemGroup>
+
+</Project>

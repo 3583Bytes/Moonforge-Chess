@@ -1,0 +1,9 @@
+# Copy to .dev.vars (gitignored) for local development.
+#
+# The Blazor dev server picks its own port and switches between http and https, so loopback
+# origins are matched by pattern rather than listed. This is off in production.
+ALLOW_LOCALHOST=1
+
+# Any value; the referee endpoints compare against it. Production sets a real one with
+# `wrangler secret put REFEREE_SECRET`.
+REFEREE_SECRET=local-dev-referee-secret

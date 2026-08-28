@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "chessbin-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+
+  // Phase 0 deliberately has no storage bindings. The Durable Object for vote ballots
+  // arrives in Phase 1; getting deploy + origin handling right first is the whole point.
+  "durable_objects": {
+    "bindings": [{ "name": "VOTE", "class_name": "VoteDO" }]
+  },
+
+  // new_sqlite_classes, not new_classes: the Workers Free plan only supports Durable Objects
+  // with the SQLite storage backend. Using new_classes here fails to deploy on a free account.
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["VoteDO"] }],
+
+  "vars": {
+    // Where the site is served from. Any other browser origin is refused outright.
+    "ALLOWED_ORIGINS": "https://chessbin.com,https://www.chessbin.com"
+  },
+
+  "observability": {
+    "enabled": true
+  }
+}

@@ -54,10 +54,9 @@ public sealed record VoteState(
 }
 
 /// <summary>A comment on the voting issue, as read from the GitHub API.</summary>
-public sealed record VoteComment(string Author, string Body, DateTimeOffset CreatedAt);
 
 /// <summary>How many people asked for a given move, and when it was first proposed.</summary>
-public sealed record VoteCount(string San, int Votes, DateTimeOffset FirstProposed);
+public sealed record VoteCount(string San, int Votes);
 
 public sealed record TallyResult(string? Winner, IReadOnlyList<VoteCount> Counts, int Voters)
 {
@@ -75,8 +74,6 @@ public static class VoteChess
 {
     public static string StatePath => "vote/state.json";
 
-    /// <summary>Characters people wrap a move in — markdown, punctuation, quoting.</summary>
-    private static readonly char[] Noise = ['*', '_', '`', '>', '"', '\'', '.', ',', '!', '?', ':', ';', '(', ')', '[', ']'];
 
     public static VoteState Parse(string json) =>
         JsonSerializer.Deserialize(json, VoteJsonContext.Default.VoteState) ?? VoteState.Empty;
@@ -93,55 +90,50 @@ public static class VoteChess
     /// because a workflow that has to be reproducible cannot roll dice.
     /// </para>
     /// </summary>
-    public static TallyResult Tally(
-        string fen,
-        IEnumerable<VoteComment> comments,
-        string botLogin,
-        DateTimeOffset windowStart)
-    {
-        ArgumentNullException.ThrowIfNull(comments);
-
-        var latestPerVoter = new Dictionary<string, VoteComment>(StringComparer.OrdinalIgnoreCase);
-        foreach (VoteComment comment in comments)
-        {
-            if (comment.CreatedAt < windowStart) continue;
-            if (string.Equals(comment.Author, botLogin, StringComparison.OrdinalIgnoreCase)) continue;
-
-            if (!latestPerVoter.TryGetValue(comment.Author, out VoteComment? held) || comment.CreatedAt > held.CreatedAt)
-                latestPerVoter[comment.Author] = comment;
-        }
-
-        var votes = new Dictionary<string, (int Count, DateTimeOffset First)>(StringComparer.Ordinal);
-        int voters = 0;
-
-        foreach (VoteComment comment in latestPerVoter.Values.OrderBy(c => c.CreatedAt))
-        {
-            string? move = FindMove(fen, comment.Body);
-            if (move is null) continue;
-
-            voters++;
-            if (votes.TryGetValue(move, out var held))
-                votes[move] = (held.Count + 1, held.First);
-            else
-                votes[move] = (1, comment.CreatedAt);
-        }
-
-        var counts = votes
-            .Select(v => new VoteCount(v.Key, v.Value.Count, v.Value.First))
-            .OrderByDescending(v => v.Votes)
-            .ThenBy(v => v.FirstProposed)
-            .ToArray();
-
-        return new TallyResult(counts.Length > 0 ? counts[0].San : null, counts, voters);
-    }
-
     /// <summary>
-    /// Plays the winning vote and Moonforge's answer, returning the state to commit.
+    /// Counts the ballots the vote server collected.
     /// <para>
-    /// Kept out of the referee tool so it can be tested without a GitHub token: this is the
-    /// only part that changes the game, and it is the part worth being sure about.
+    /// One person, one vote is already settled by the time ballots get here — the server keys
+    /// them by browser and a second vote replaces the first — so this only has to count and
+    /// break ties. Ties go to whichever move comes first in the published ballot, which is
+    /// alphabetical and therefore checkable by anyone who wants to argue about it.
     /// </para>
     /// </summary>
+    /// <param name="ballots">Voter token to the move they chose.</param>
+    /// <param name="candidates">The published ballot, in order. Anything not on it is ignored.</param>
+    public static TallyResult Tally(
+        IReadOnlyDictionary<string, string> ballots,
+        IReadOnlyList<string> candidates)
+    {
+        ArgumentNullException.ThrowIfNull(ballots);
+        ArgumentNullException.ThrowIfNull(candidates);
+
+        // Position on the ballot, which is both the membership test and the tie-break.
+        var position = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (int i = 0; i < candidates.Count; i++) position.TryAdd(candidates[i], i);
+
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        int voters = 0;
+
+        foreach (string choice in ballots.Values)
+        {
+            // A ballot for something not on the list cannot be played, so it cannot count.
+            // The server refuses these, but the referee is the authority and re-checks.
+            if (!position.ContainsKey(choice)) continue;
+
+            counts[choice] = counts.GetValueOrDefault(choice) + 1;
+            voters++;
+        }
+
+        var ordered = counts
+            .Select(entry => new VoteCount(entry.Key, entry.Value))
+            .OrderByDescending(count => count.Votes)
+            .ThenBy(count => position[count.San])
+            .ToArray();
+
+        return new TallyResult(ordered.Length > 0 ? ordered[0].San : null, ordered, voters);
+    }
+
     public static PlayResult Play(VoteState state, string winningSan, int votes, DateTimeOffset now, int hours)
     {
         ArgumentNullException.ThrowIfNull(state);
@@ -193,18 +185,70 @@ public static class VoteChess
         return "Drawn";
     }
 
-    /// <summary>The first legal move mentioned in a comment, or null if it names none.</summary>
-    public static string? FindMove(string fen, string body)
+    /// <summary>
+    /// Every legal move in a position, in notation, sorted so the order is the same every time.
+    /// <para>
+    /// This is what the referee publishes as the ballot: the community can play anything the
+    /// rules allow, and the vote server — which knows nothing about chess — only has to check
+    /// that a ballot names one of them.
+    /// </para>
+    /// <para>
+    /// Each candidate is produced by actually playing the move and reading back the notation
+    /// the engine generated, rather than by composing notation here. That way disambiguation
+    /// ("Nbd2", "R1e2"), captures, castling and promotion all read exactly as the engine will
+    /// write them when the move is really played, so a ballot can never fail to match.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<string> LegalMoves(string fen)
     {
-        if (string.IsNullOrWhiteSpace(body)) return null;
+        if (string.IsNullOrWhiteSpace(fen)) return [];
 
-        foreach (string raw in body.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+        var survey = new Engine(fen);
+        survey.GenerateValidMoves();
+        ChessPieceColor mover = survey.WhoseMove;
+
+        // Sorted rather than in generation order: a stable, alphabetical ballot is easy to scan
+        // in a list of thirty, and it gives ties a tie-break anyone can check for themselves.
+        var moves = new SortedSet<string>(StringComparer.Ordinal);
+
+        for (byte column = 0; column < 8; column++)
         {
-            string token = raw.Trim().Trim(Noise);
-            if (token.Length is < 2 or > 7) continue;
-            if (SanMove.IsLegal(fen, token)) return token.TrimEnd('+', '#', '!', '?');
+            for (byte row = 0; row < 8; row++)
+            {
+                ChessPieceType piece = survey.GetPieceTypeAt(column, row);
+                if (piece == ChessPieceType.None) continue;
+                if (survey.GetPieceColorAt(column, row) != mover) continue;
+
+                byte[][]? targets = survey.GetValidMoves(column, row);
+                if (targets is null) continue;
+
+                foreach (byte[] target in targets)
+                {
+                    bool promotes = piece == ChessPieceType.Pawn
+                        && target[1] == (mover == ChessPieceColor.White ? 0 : 7);
+
+                    foreach (ChessPieceType choice in promotes ? PromotionChoices : NoPromotion)
+                    {
+                        // A fresh engine per move: the mailbox engine has no cheap unmake, and
+                        // this runs once a day in CI, so clarity beats the microseconds.
+                        var play = new Engine(fen);
+                        play.GenerateValidMoves();
+                        play.PromoteToPieceType = choice;
+
+                        if (!play.MovePiece(column, row, target[0], target[1])) continue;
+
+                        string san = play.LastMove.PgnMove;
+                        if (!string.IsNullOrWhiteSpace(san)) moves.Add(san);
+                    }
+                }
+            }
         }
 
-        return null;
+        return [.. moves];
     }
+
+    private static readonly ChessPieceType[] PromotionChoices =
+        [ChessPieceType.Queen, ChessPieceType.Rook, ChessPieceType.Bishop, ChessPieceType.Knight];
+
+    private static readonly ChessPieceType[] NoPromotion = [ChessPieceType.Queen];
 }

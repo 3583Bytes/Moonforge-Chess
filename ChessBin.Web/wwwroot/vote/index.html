@@ -2,18 +2,18 @@
 <html lang="en">
 
 <!--
-    Boot page for /review. Same reasoning as the other routes: a real 200 response, its own
+    Boot page for /vote. Same reasoning as the other routes: a real 200 response, its own
     title and social card, and content a crawler can read without executing WebAssembly.
 -->
 
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Paste a PGN and get free chess game analysis in your browser. Moonforge names which part of the position each move cost you — not just a number." />
+    <meta name="description" content="Everyone votes on one move a day against the Moonforge engine. Vote on the site — no account, no signup, nothing to install." />
     <meta name="theme-color" content="#0d0f13" />
-    <title>Chess Game Analysis — Paste a PGN | ChessBin</title>
+    <title>Vote Chess — Everyone vs the Engine | ChessBin</title>
     <base href="/" />
-    <link rel="canonical" href="https://chessbin.com/review/" />
+    <link rel="canonical" href="https://chessbin.com/vote/" />
     <link rel="preload" id="webassembly" />
     <link rel="stylesheet" href="css/app.css" />
     <link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48" />
@@ -21,9 +21,9 @@
     <link rel="manifest" href="site.webmanifest" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="ChessBin" />
-    <meta property="og:title" content="ChessBin · Chess game analysis" />
-    <meta property="og:description" content="Paste a PGN and get free chess game analysis in your browser. Moonforge names which part of the position each move cost you — not just a number." />
-    <meta property="og:url" content="https://chessbin.com/review/" />
+    <meta property="og:title" content="ChessBin · Vote chess" />
+    <meta property="og:description" content="Everyone votes on one move a day against the Moonforge engine. Vote on the site — no account, no signup, nothing to install." />
+    <meta property="og:url" content="https://chessbin.com/vote/" />
     <meta property="og:image" content="https://chessbin.com/brand/og-puzzle.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -35,13 +35,13 @@
     {
       "@context": "https://schema.org",
       "@type": "WebApplication",
-      "name": "ChessBin Game Analysis",
-      "url": "https://chessbin.com/review/",
+      "name": "ChessBin Vote Chess",
+      "url": "https://chessbin.com/vote/",
       "applicationCategory": "GameApplication",
       "operatingSystem": "Any modern web browser",
       "isAccessibleForFree": true,
       "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-      "description": "Free chess game analysis in the browser: paste a PGN and see what each move cost, broken down by named evaluation terms."
+      "description": "A community chess game: everyone votes on one move a day, and the Moonforge engine answers. No account needed to vote."
     }
     </script>
 </head>
@@ -60,20 +60,20 @@
                 <a href="/">Play</a>
                 <a href="/puzzle/">Daily puzzle</a>
                 <a href="/puzzle/practice/">Practice</a>
-                <a href="/review/" class="active">Analyse</a>
-                <a href="/vote/">Vote chess</a>
+                <a href="/review/">Analyse</a>
+                <a href="/vote/" class="active">Vote chess</a>
                 </nav>
             </header>
 
             <section class="hero">
                 <div>
-                    <p class="eyebrow">Game analysis · free · no signup</p>
-                    <h1>Why did that move lose?</h1>
+                    <p class="eyebrow">Community game · free · no signup</p>
+                    <h1>Everyone versus the engine.</h1>
                 </div>
-                <p class="intro">Paste a game from Lichess, Chess.com or your own notation and see what each move cost — and which part of the position paid for it.</p>
+                <p class="intro">One move a day, chosen by whoever turns up. The move with the most votes gets played, and Moonforge answers.</p>
             </section>
 
-            <p class="boot-note">Moonforge scores positions from named terms — material, king safety, pawn structure, mobility — so a review can say which of them a move gave away. Engines built on neural networks cannot: their evaluation is a single number with no parts to name. Nothing you paste leaves your browser.</p>
+            <p class="boot-note">Every legal move is on the ballot, so the community can play anything the rules allow — not a shortlist someone picked. One vote each, and you can change your mind until the deadline. Nothing is stored about you: your browser gets a random name the first time you vote, and clearing your site data throws it away.</p>
 
             <nav class="boot-links" aria-label="Go to">
             <a href="/puzzle/">Today&#39;s puzzle</a>

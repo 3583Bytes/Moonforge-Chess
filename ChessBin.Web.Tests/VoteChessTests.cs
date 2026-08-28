@@ -1,4 +1,5 @@
 using ChessBin.Web;
+using ChessEngine.Engine;
 
 namespace ChessBin.Web.Tests;
 
@@ -7,34 +8,16 @@ public sealed class VoteChessTests
     private const string Start = ChessGameSession.StartingFen;
     private static readonly DateTimeOffset T0 = new(2026, 8, 25, 12, 0, 0, TimeSpan.Zero);
 
-    private static VoteComment C(string author, string body, int minutes) =>
-        new(author, body, T0.AddMinutes(minutes));
+    /// <summary>The published ballot for the opening position, which is what voters chose from.</summary>
+    private static readonly IReadOnlyList<string> Ballot = VoteChess.LegalMoves(Start);
 
-    private static TallyResult Tally(params VoteComment[] comments) =>
-        VoteChess.Tally(Start, comments, botLogin: "chessbin-bot", windowStart: T0);
-
-    [Test]
-    public void PeopleCanWriteAMoveInASentence()
-    {
-        Assert.Multiple(() =>
-        {
-            Assert.That(VoteChess.FindMove(Start, "I say e4"), Is.EqualTo("e4"));
-            Assert.That(VoteChess.FindMove(Start, "**Nf3** looks best to me"), Is.EqualTo("Nf3"));
-            Assert.That(VoteChess.FindMove(Start, "d4!"), Is.EqualTo("d4"));
-            Assert.That(VoteChess.FindMove(Start, "let's go with `c4`."), Is.EqualTo("c4"));
-            Assert.That(VoteChess.FindMove(Start, "no idea honestly"), Is.Null);
-            Assert.That(VoteChess.FindMove(Start, "Qh5 is illegal here"), Is.Null,
-                "a move that isn't legal in this position is not a vote");
-        });
-    }
+    private static TallyResult Tally(params (string Voter, string San)[] ballots) =>
+        VoteChess.Tally(ballots.ToDictionary(b => b.Voter, b => b.San), Ballot);
 
     [Test]
     public void TheMostVotedMoveWins()
     {
-        var result = Tally(
-            C("ann", "e4", 1),
-            C("bob", "e4", 2),
-            C("cal", "d4", 3));
+        TallyResult result = Tally(("ann", "e4"), ("bob", "e4"), ("cal", "d4"));
 
         Assert.Multiple(() =>
         {
@@ -46,56 +29,20 @@ public sealed class VoteChessTests
     }
 
     [Test]
-    public void OnePersonGetsOneVoteAndMayChangeTheirMind()
+    public void TiesGoToWhicheverMoveIsFirstOnTheBallot()
     {
-        var result = Tally(
-            C("ann", "e4", 1),
-            C("ann", "actually d4", 5),      // same person, later
-            C("bob", "d4", 2));
+        // The ballot is sorted, so this is checkable by anyone who wants to argue about it:
+        // "Nf3" precedes "e4" in ordinal order because capitals sort before lowercase.
+        TallyResult result = Tally(("ann", "e4"), ("bob", "Nf3"), ("cal", "e4"), ("dee", "Nf3"));
 
-        Assert.Multiple(() =>
-        {
-            Assert.That(result.Winner, Is.EqualTo("d4"));
-            Assert.That(result.Voters, Is.EqualTo(2), "ann still only counts once");
-            Assert.That(result.Counts.Single(c => c.San == "d4").Votes, Is.EqualTo(2));
-            Assert.That(result.Counts.Any(c => c.San == "e4"), Is.False, "her earlier vote is gone");
-        });
-    }
-
-    [Test]
-    public void TiesGoToTheMoveProposedFirst()
-    {
-        var result = Tally(
-            C("ann", "d4", 5),
-            C("bob", "e4", 1),
-            C("cal", "d4", 6),
-            C("dee", "e4", 2));
-
-        Assert.That(result.Winner, Is.EqualTo("e4"),
-            "e4 and d4 both have two votes, but e4 was on the table first");
-    }
-
-    [Test]
-    public void TheBotsOwnCommentsAndAnythingBeforeTheWindowAreIgnored()
-    {
-        var result = VoteChess.Tally(Start,
-        [
-            new VoteComment("chessbin-bot", "Voting is open. Reply with a move.", T0.AddMinutes(1)),
-            new VoteComment("ann", "e4", T0.AddMinutes(-30)),   // last round's vote
-            new VoteComment("bob", "d4", T0.AddMinutes(3)),
-        ], botLogin: "chessbin-bot", windowStart: T0);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(result.Winner, Is.EqualTo("d4"));
-            Assert.That(result.Voters, Is.EqualTo(1), "the bot does not vote and stale comments do not carry over");
-        });
+        Assert.That(result.Winner, Is.EqualTo("Nf3"));
+        Assert.That(Ballot.ToList().IndexOf("Nf3"), Is.LessThan(Ballot.ToList().IndexOf("e4")));
     }
 
     [Test]
     public void NobodyVoting_LeavesNoWinnerRatherThanPickingOne()
     {
-        var result = Tally(C("ann", "hello", 1), C("bob", "good luck everyone", 2));
+        TallyResult result = Tally();
 
         Assert.Multiple(() =>
         {
@@ -104,6 +51,28 @@ public sealed class VoteChessTests
             Assert.That(result.Voters, Is.Zero);
             Assert.That(result.Counts, Is.Empty);
         });
+    }
+
+    [Test]
+    public void AMoveThatIsNotOnTheBallotIsNotCounted()
+    {
+        // The vote server refuses these, but the referee is the authority and checks again —
+        // a bug or a change of position upstream must not put an unplayable move on the board.
+        TallyResult result = Tally(("ann", "Qh5"), ("bob", "e4"));
+
+        Assert.That(result.Winner, Is.EqualTo("e4"));
+        Assert.That(result.Voters, Is.EqualTo(1), "the impossible ballot is discarded, not counted");
+    }
+
+    [Test]
+    public void OnePersonStillOnlyCountsOnce()
+    {
+        // The server keys ballots by browser, so this is really a check that the referee does
+        // not somehow double-count a single entry.
+        TallyResult result = Tally(("ann", "d4"), ("bob", "d4"));
+
+        Assert.That(result.Counts.Single().Votes, Is.EqualTo(2));
+        Assert.That(result.Voters, Is.EqualTo(2));
     }
 
     [Test]
@@ -215,5 +184,89 @@ public sealed class VoteChessTests
             Assert.That(state.Fen, Is.EqualTo(Start));
             Assert.That(state.History, Is.Empty);
         });
+    }
+
+    // ── the ballot the referee publishes ────────────────────────────────────
+
+    [Test]
+    public void TheOpeningPositionOffersTwentyMoves()
+    {
+        IReadOnlyList<string> moves = VoteChess.LegalMoves(Start);
+
+        Assert.That(moves, Has.Count.EqualTo(20), "sixteen pawn moves and four knight moves");
+        Assert.That(moves, Does.Contain("e4").And.Contain("Nf3").And.Contain("a3"));
+    }
+
+    [Test]
+    public void TheBallotIsSortedSoTheSamePositionAlwaysListsTheSameOrder()
+    {
+        IReadOnlyList<string> once = VoteChess.LegalMoves(Start);
+        IReadOnlyList<string> again = VoteChess.LegalMoves(Start);
+
+        Assert.That(once, Is.EqualTo(again));
+        Assert.That(once, Is.Ordered.Using<string>(StringComparer.Ordinal));
+    }
+
+    [Test]
+    public void EveryPromotionIsOfferedSeparately()
+    {
+        // Underpromotion is a real choice, and a vote that could only ever make a queen would
+        // quietly remove it from the game.
+        IReadOnlyList<string> moves = VoteChess.LegalMoves("8/4P3/8/8/8/8/8/K6k w - - 0 1");
+
+        Assert.That(moves, Does.Contain("e8=Q").And.Contain("e8=R")
+            .And.Contain("e8=B").And.Contain("e8=N"));
+    }
+
+    [Test]
+    public void CastlingIsOnTheBallot()
+    {
+        IReadOnlyList<string> moves = VoteChess.LegalMoves("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1");
+
+        Assert.That(moves, Does.Contain("O-O").And.Contain("O-O-O"));
+    }
+
+    [Test]
+    public void DisambiguationMatchesWhatTheEngineWillWrite()
+    {
+        // Two knights reach d2. If the ballot said "Nd2" the move could never be played back,
+        // so the candidate has to carry the same disambiguation the engine generates.
+        IReadOnlyList<string> moves = VoteChess.LegalMoves("4k3/8/8/8/8/8/8/1N1K1N2 w - - 0 1");
+
+        Assert.That(moves, Does.Contain("Nbd2").And.Contain("Nfd2"));
+        Assert.That(moves, Does.Not.Contain("Nd2"));
+    }
+
+    [Test]
+    public void EveryCandidateCanActuallyBePlayed()
+    {
+        // The contract that matters: whatever wins the vote must be applicable. If any
+        // candidate failed here, a community vote could deadlock the game.
+        foreach (string fen in new[]
+        {
+            Start,
+            "r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4",
+            "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1",
+            "8/4P3/8/8/8/8/8/K6k w - - 0 1",
+        })
+        {
+            foreach (string san in VoteChess.LegalMoves(fen))
+            {
+                Assert.That(SanMove.IsLegal(fen, san), Is.True, $"{san} in {fen}");
+            }
+        }
+    }
+
+    [Test]
+    public void ACheckmatedSideHasAnEmptyBallot()
+    {
+        Assert.That(VoteChess.LegalMoves("rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3"),
+            Is.Empty);
+    }
+
+    [Test]
+    public void AnUnreadableFenYieldsNothingRatherThanThrowing()
+    {
+        Assert.That(VoteChess.LegalMoves(""), Is.Empty);
     }
 }

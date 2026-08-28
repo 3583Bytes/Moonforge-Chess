@@ -13,7 +13,7 @@
         </div>
         <p class="intro">
             Everyone votes on one move a day; whichever move gets the most votes is played, and
-            Moonforge answers. Voting happens in a thread on GitHub — watching needs nothing at all.
+            Moonforge answers. Vote right here — no account, no signup.
         </p>
     </section>
 
@@ -82,18 +82,71 @@
 
                 <section class="panel-section">
                     <div class="section-heading">
-                        <h2>How to vote</h2>
-                        <span>GitHub</span>
+                        <h2>@(_ballot.Tally.Open ? "Pick the next move" : "Voting")</h2>
+                        <span>@VoterCount</span>
                     </div>
-                    <p class="position-message">
-                        Reply in the thread with a move in algebraic notation — <code class="inline">Nf6</code>,
-                        <code class="inline">exd5</code>, <code class="inline">O-O</code>. One vote each; your
-                        latest reply is the one that counts.
-                    </p>
+
+                    @if (_ballot.Tally.Counts.Count == 0)
+                    {
+                        <p class="position-message">
+                            @(_ballot.Tally.HasRound
+                                ? "This round is settled. The next set of moves appears when the referee posts it."
+                                : "No round is open yet. When one starts, the moves to choose between appear here.")
+                        </p>
+                    }
+                    else
+                    {
+                        <ul class="vote-options">
+                            @foreach (VoteOption option in _ballot.Tally.Counts)
+                            {
+                                <li @key="option.San">
+                                    <button type="button"
+                                            class="vote-option @(option.San == _ballot.MyChoice ? "chosen" : null)"
+                                            disabled="@(!_ballot.CanVote)"
+                                            aria-pressed="@(option.San == _ballot.MyChoice ? "true" : "false")"
+                                            @onclick="() => VoteForAsync(option.San)">
+                                        <span class="vote-bar" style="width:@(_ballot.SharePercent(option))%" aria-hidden="true"></span>
+                                        <span class="vote-move">@option.San</span>
+                                        <span class="vote-count">@option.Votes</span>
+                                    </button>
+                                </li>
+                            }
+                        </ul>
+
+                        @if (_ballot.Tally.Open)
+                        {
+                            @if (_ballot.MyChoice is null)
+                            {
+                                <p class="position-message">One vote each. You can change it until voting closes.</p>
+                            }
+                        }
+                        else if (_ballot.Leader is VoteOption winner)
+                        {
+                            <p class="position-message">
+                                <strong>@winner.San</strong> is ahead with @winner.Votes of @_ballot.TotalVotes votes.
+                                It gets played when the referee next runs.
+                            </p>
+                        }
+                        else if (_ballot.TotalVotes > 0)
+                        {
+                            <p class="position-message">
+                                It's a tie on @_ballot.TotalVotes votes — the referee breaks it by
+                                whichever move comes first on the list above.
+                            </p>
+                        }
+                    }
+
+                    @if (_ballot.Message.Length > 0)
+                    {
+                        <p class="vote-message @(_ballot.MessageIsProblem ? "problem" : "confirmed")" role="status">
+                            @_ballot.Message
+                        </p>
+                    }
+
                     @if (_state.Issue > 0)
                     {
-                        <a class="primary-button" href="@IssueUrl" target="_blank" rel="noreferrer">
-                            @(_state.IsFinished ? "Read the thread ↗" : "Cast your vote ↗")
+                        <a class="text-link" href="@IssueUrl" target="_blank" rel="noreferrer">
+                            Discuss this move on GitHub ↗
                         </a>
                     }
                 </section>
@@ -122,7 +175,7 @@
 
     <footer class="site-footer">
         <span>The board is a file in the repository; a scheduled job is the referee.</span>
-        <span>No server, no account needed to watch.</span>
+        <span>Votes are anonymous — no account, and nothing about you is stored.</span>
     </footer>
 </main>
 
@@ -130,10 +183,50 @@
     private VoteState? _state;
     private Engine? _board;
     private string? _error;
+    private readonly VoteBallot _ballot = new();
+    private string? _token;
 
     [Inject] private HttpClient Http { get; set; } = null!;
+    [Inject] private IVoteApi Votes { get; set; } = null!;
+    [Inject] private IJSRuntime Js { get; set; } = null!;
 
-    protected override Task OnInitializedAsync() => LoadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        await RefreshTallyAsync();
+    }
+
+    /// <summary>
+    /// Fetches the live vote counts. Kept separate from <see cref="LoadAsync"/> so a vote
+    /// server that is down or unreachable costs the visitor the buttons and nothing else —
+    /// the board comes from a static file and renders regardless.
+    /// </summary>
+    private async Task RefreshTallyAsync()
+    {
+        _ballot.Apply(await Votes.GetTallyAsync());
+        StateHasChanged();
+    }
+
+    private async Task VoteForAsync(string san)
+    {
+        _ballot.BeginSubmitting();
+        StateHasChanged();
+
+        _token ??= await Js.InvokeAsync<string>("chessBin.getPlayerToken");
+        _ballot.Apply(await Votes.CastAsync(_token, san), san);
+        StateHasChanged();
+
+        // The candidate list moved on without us; get the real one rather than leave stale
+        // buttons that will keep failing.
+        if (_ballot.MessageIsProblem) await RefreshTallyAsync();
+    }
+
+    private string VoterCount => _ballot.Tally.Voters switch
+    {
+        0 => "no votes yet",
+        1 => "1 voter",
+        int n => $"{n} voters",
+    };
 
     private async Task LoadAsync()
     {

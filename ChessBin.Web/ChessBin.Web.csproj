@@ -37,4 +37,11 @@
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.9" PrivateAssets="all" />
   </ItemGroup>
 
+
+  <ItemGroup>
+    <!-- Points the API at localhost. Blazor only loads it when the environment is Development,
+         so shipping it was harmless, but dev config has no business in a public deploy. -->
+    <Content Update="wwwroot\appsettings.Development.json" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
 </Project>
