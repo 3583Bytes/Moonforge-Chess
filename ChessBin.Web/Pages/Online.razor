@@ -1,0 +1,336 @@
+@page "/play-online"
+@using ChessBin.Online
+@using ChessEngine.Engine
+@implements IDisposable
+
+<PageTitle>Play Chess Online Against a Person | ChessBin</PageTitle>
+
+<main class="page">
+    <section class="hero">
+        <div>
+            <p class="eyebrow">Online chess · free · no signup</p>
+            <h1>@Heading</h1>
+        </div>
+        <p class="intro">
+            Get matched with whoever else is looking, and play. No account, no rating, nothing
+            to install — just a game.
+        </p>
+    </section>
+
+    @if (_session is null)
+    {
+        <section class="puzzle-loading" aria-live="polite">Getting ready…</section>
+    }
+    else if (_session.Phase is OnlinePhase.Idle or OnlinePhase.Seeking)
+    {
+        <section class="game-layout" aria-label="Find a game">
+            <div class="board-column">
+                <div class="board-wrap">
+                    <ChessBoardView Squares="_session.GetDisplaySquares()"
+                                    WhiteAtBottom="true"
+                                    Interactive="false"
+                                    Label="Waiting for a game" />
+                </div>
+                <p class="status-line" aria-live="polite">
+                    <span class="status-icon">@(_session.Phase == OnlinePhase.Seeking ? "◌" : "●")</span> @_session.Status
+                </p>
+            </div>
+
+            <aside class="control-panel puzzle-panel">
+                <div class="panel-tabs">
+                    <button type="button">Find a game</button>
+                    <span>@(_session.Phase == OnlinePhase.Seeking ? "searching" : "no account needed")</span>
+                </div>
+
+                <section class="panel-section setup-section">
+                    <label style="grid-column: 1 / -1;">
+                        <span>Time control</span>
+                        <select @bind="_timeControl" disabled="@(_session.Phase == OnlinePhase.Seeking)">
+                            <option value="Bullet">1 + 0 · Bullet</option>
+                            <option value="Blitz">3 + 2 · Blitz</option>
+                            <option value="Rapid">10 + 0 · Rapid</option>
+                            <option value="Unlimited">No clock</option>
+                        </select>
+                    </label>
+
+                    @if (_session.Phase == OnlinePhase.Seeking)
+                    {
+                        <button class="primary-button" type="button" @onclick="CancelAsync">Cancel search</button>
+                    }
+                    else
+                    {
+                        <button class="primary-button" type="button" @onclick="SeekAsync">Find an opponent</button>
+                    }
+                </section>
+
+                <section class="panel-section">
+                    <div class="section-heading"><h2>How this works</h2><span>worth knowing</span></div>
+                    <p class="position-message">
+                        You are paired with whoever else picked the same time control. Both
+                        browsers check every move with the same engine that runs the rest of the
+                        site, so an illegal move simply cannot be played against you.
+                    </p>
+                    <p class="position-message">
+                        There are no accounts and no ratings here, so there is nothing to win by
+                        cheating — if the two sides ever disagree about a move, the game stops
+                        rather than guessing who was right.
+                    </p>
+                </section>
+            </aside>
+        </section>
+    }
+    else
+    {
+        <section class="game-layout" aria-label="Online game">
+            <div class="board-column">
+                <div class="player-strip opponent">
+                    <div class="avatar human-avatar" aria-hidden="true">@(_session.Seat == Seat.White ? "B" : "W")</div>
+                    <div>
+                        <strong>Your opponent</strong>
+                        <span>@(_session.Seat == Seat.White ? "Black pieces" : "White pieces")</span>
+                    </div>
+                    <time class="chess-clock">@ClockLabel(OpponentMs)</time>
+                </div>
+
+                <div class="board-wrap">
+                    <ChessBoardView Squares="_session.GetDisplaySquares()"
+                                    WhiteAtBottom="_session.WhiteAtBottom"
+                                    Interactive="@(_session.IsMyTurn && !_session.HasPendingPromotion)"
+                                    ShowCoordinates="true"
+                                    Label="Online game board"
+                                    MoveKey="_session.Moves.Count"
+                                    OnSquareClick="HandleSquareAsync" />
+
+                    @if (_session.HasPendingPromotion)
+                    {
+                        <div class="promotion-card" role="dialog" aria-modal="true" aria-label="Choose promotion piece">
+                            <strong>Promote your pawn</strong>
+                            <div class="promotion-pieces">
+                                @foreach (ChessPieceType type in PromotionPieces)
+                                {
+                                    <button type="button" aria-label="Promote to @type"
+                                            @onclick="() => _session.CompletePromotionAsync(type)">@Pieces.Glyph(type, MyColour)</button>
+                                }
+                            </div>
+                            <button class="text-button" type="button" @onclick="_session.CancelPromotion">Cancel</button>
+                        </div>
+                    }
+                </div>
+
+                <div class="player-strip">
+                    <div class="avatar human-avatar" aria-hidden="true">Y</div>
+                    <div>
+                        <strong>You</strong>
+                        <span>@(_session.Seat == Seat.White ? "White pieces" : "Black pieces")</span>
+                    </div>
+                    <time class="chess-clock">@ClockLabel(MyMs)</time>
+                </div>
+
+                <p class="status-line" aria-live="polite">
+                    <span class="status-icon">@StatusIcon</span> @_session.Status
+                </p>
+            </div>
+
+            <aside class="control-panel puzzle-panel">
+                <div class="panel-tabs">
+                    <button type="button">Game</button>
+                    <span>@(_session.Seat == Seat.White ? "White" : "Black")</span>
+                </div>
+
+                @if (_session.View?.DrawOfferedToYou == true && _session.Phase == OnlinePhase.Playing)
+                {
+                    <section class="panel-section">
+                        <div class="section-heading"><h2>Draw offered</h2><span>your call</span></div>
+                        <div class="position-actions">
+                            <button type="button" @onclick="_session.OfferDrawAsync">Accept draw</button>
+                            <button type="button" @onclick="_session.DeclineDrawAsync">Decline</button>
+                        </div>
+                    </section>
+                }
+
+                <section class="panel-section moves-section">
+                    <div class="section-heading">
+                        <h2>Moves</h2>
+                        <span>@_session.Moves.Count</span>
+                    </div>
+                    @if (_session.Moves.Count == 0)
+                    {
+                        <p class="empty-state">The game record will appear here.</p>
+                    }
+                    else
+                    {
+                        <ol class="move-list">
+                            @for (int index = 0; index < _session.Moves.Count; index += 2)
+                            {
+                                <li>
+                                    <span class="move-number">@(index / 2 + 1).</span>
+                                    <span class="move-button">@_session.Moves[index]</span>
+                                    @if (index + 1 < _session.Moves.Count)
+                                    {
+                                        <span class="move-button">@_session.Moves[index + 1]</span>
+                                    }
+                                </li>
+                            }
+                        </ol>
+                    }
+                </section>
+
+                @if (_session.Phase == OnlinePhase.Finished)
+                {
+                    <section class="panel-section keep-going">
+                        <p class="position-message">@_session.Status</p>
+                        <button class="primary-button" type="button" @onclick="SeekAsync">Play another</button>
+                    </section>
+                }
+                else
+                {
+                    <section class="panel-section">
+                        <div class="section-heading"><h2>This game</h2><span>@PhaseLabel</span></div>
+                        <div class="position-actions">
+                            <button type="button" disabled="@(_session.Phase != OnlinePhase.Playing)" @onclick="_session.OfferDrawAsync">Offer draw</button>
+                            @if (_session.Moves.Count == 0)
+                            {
+                                <button type="button" @onclick="_session.AbortAsync">Abort</button>
+                            }
+                            else
+                            {
+                                <button type="button" @onclick="ResignAsync">Resign</button>
+                            }
+                        </div>
+                    </section>
+                }
+
+                @* Not inside .position-actions: that is a three-column grid, which squeezes a
+                   sentence-length link into a third of the panel and wraps it over three lines. *@
+                <section class="panel-section">
+                    <div class="section-heading"><h2>Position</h2><span>optional</span></div>
+                    <a class="text-link" href="@($"/?fen={Uri.EscapeDataString(_session.Fen)}")">Play this on against Moonforge →</a>
+                </section>
+            </aside>
+        </section>
+    }
+
+    <SiteFooter>
+        <Note>Games are not stored and there are no ratings — nothing about you is kept.</Note>
+    </SiteFooter>
+</main>
+
+@code {
+    private static readonly ChessPieceType[] PromotionPieces =
+    [
+        ChessPieceType.Queen, ChessPieceType.Rook, ChessPieceType.Bishop, ChessPieceType.Knight
+    ];
+
+    private OnlineSession? _session;
+    private string _timeControl = "Blitz";
+    private System.Threading.Timer? _poll;
+    private System.Threading.Timer? _tick;
+    private bool _polling;
+
+    [Inject] private IPlayApi Play { get; set; } = null!;
+    [Inject] private IJSRuntime Js { get; set; } = null!;
+
+    private string Heading => _session?.Phase switch
+    {
+        OnlinePhase.Playing or OnlinePhase.Seated => "Your game.",
+        OnlinePhase.Finished => "Good game.",
+        _ => "Play someone.",
+    };
+
+    private string PhaseLabel => _session?.Phase == OnlinePhase.Seated ? "waiting" : "in progress";
+
+    private string StatusIcon => _session?.Phase switch
+    {
+        OnlinePhase.Finished => "◆",
+        OnlinePhase.Seated => "◌",
+        _ => "●",
+    };
+
+    private ChessPieceColor MyColour => _session?.Seat == Seat.Black ? ChessPieceColor.Black : ChessPieceColor.White;
+
+    private long MyMs => _session is null || _session.Seat is not Seat seat ? 0 : _session.MsRemaining(seat);
+
+    private long OpponentMs => _session is null || _session.Seat is not Seat seat
+        ? 0
+        : _session.MsRemaining(seat == Seat.White ? Seat.Black : Seat.White);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _session is not null) return;
+
+        // The same anonymous per-browser token vote chess uses. It is the only thing that
+        // authorises a move, so it never leaves this browser except to the game server.
+        string token = await Js.InvokeAsync<string>("chessBin.getPlayerToken");
+
+        _session = new OnlineSession(Play, token);
+        _session.StateChanged += OnSessionChanged;
+
+        // Polling rather than a socket: it is the same shape as the rest of the site's API
+        // calls and needs no new transport. A live game is the obvious candidate for a
+        // WebSocket later — the server's interface would not have to change.
+        _poll = new System.Threading.Timer(async _ => await PollAsync(), null, 1_000, 1_200);
+        _tick = new System.Threading.Timer(_ => _ = InvokeAsync(StateHasChanged), null, 250, 250);
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>Guarded so a slow poll cannot overlap the next one and apply moves twice.</summary>
+    private async Task PollAsync()
+    {
+        if (_session is null || _polling) return;
+
+        _polling = true;
+        try
+        {
+            await _session.PollAsync();
+        }
+        finally
+        {
+            _polling = false;
+        }
+    }
+
+    private async Task SeekAsync()
+    {
+        if (_session is null) return;
+        await _session.SeekAsync(Clock());
+    }
+
+    private async Task CancelAsync()
+    {
+        if (_session is null) return;
+        await _session.CancelSeekAsync();
+    }
+
+    private async Task ResignAsync()
+    {
+        if (_session is null) return;
+        await _session.ResignAsync();
+    }
+
+    private async Task HandleSquareAsync(BoardSquare square)
+    {
+        if (_session is null) return;
+        await _session.ClickSquareAsync(square.Column, square.Row);
+    }
+
+    private MatchClock Clock() => _timeControl switch
+    {
+        "Bullet" => MatchClock.Bullet,
+        "Rapid" => MatchClock.Rapid,
+        "Unlimited" => MatchClock.Untimed,
+        _ => MatchClock.Blitz,
+    };
+
+    private static string ClockLabel(long milliseconds) =>
+        milliseconds <= 0 ? "∞" : TimeSpan.FromMilliseconds(milliseconds).ToString(@"m\:ss");
+
+    private void OnSessionChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        _poll?.Dispose();
+        _tick?.Dispose();
+        if (_session is not null) _session.StateChanged -= OnSessionChanged;
+    }
+}

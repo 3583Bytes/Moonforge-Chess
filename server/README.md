@@ -56,3 +56,52 @@ src/index.ts     Worker entry: origin rules, routing
 test/            Specs, run in workerd via @cloudflare/vitest-pool-workers
 wrangler.jsonc   Deployment config and production vars
 ```
+
+## Online play
+
+`/play/*` hosts games between two people. Two Durable Objects: `LobbyDO` (one, for the whole
+site) pairs strangers on time control and assigns the colours; `MatchDO` (one per game) holds
+the seats, the move list and the clocks.
+
+**The server knows no chess, on purpose.** It owns seats, turn order and time; whether a move
+is legal, whether it is mate, whether the position is drawn — none of that is decided here.
+`ChessBin.Web/OnlineSession.cs` runs a real `ChessBin.Online.Match` in each player's browser
+and replays every move the server reports, including the opponent's, before the board moves.
+
+That split exists because the alternative is a 26 MB .NET runtime inside a Worker whose script
+limit is 3 MB compressed, and because reimplementing the rules in TypeScript would mean two
+engines that have to agree forever.
+
+It is safe because **both** clients check:
+
+- An illegal move is relayed but refused by the opponent's engine, which posts `/dispute`. The
+  game aborts. It never reaches their board.
+- A legal move carrying a false result claim ("that was mate") is caught the same way — the
+  claim is replayed, not believed.
+- Time cannot be stolen: the clocks are here, not in the browser.
+
+What it cannot do is say **which** of two disagreeing clients is right. With no accounts and
+no ratings there is nothing to win by lying, so an abort is proportionate. If that changes,
+only `move` needs to grow an arbiter — the client's interface does not move.
+
+### Routes
+
+| Route | Who | What |
+|---|---|---|
+| `POST /play/seek` | player | Pair me, or queue me. Safe to repeat; that is how a queued player learns they have a game. |
+| `POST /play/cancel` | player | Withdraw a seek. |
+| `POST /play/<id>/join` | player | "I have arrived." The game starts once both have. |
+| `GET /play/<id>/state` | player | The board, the clocks, whose turn. Token in the query string. |
+| `POST /play/<id>/move` | player | Record a move, optionally with a claimed result. |
+| `POST /play/<id>/{resign,draw,decline,abort}` | player | The rest of what a player can do. |
+| `POST /play/<id>/dispute` | player | "My engine refuses the move at this ply." Aborts the game. |
+
+`<id>` must match the UUID shape the lobby issues, so a caller cannot name an arbitrary
+Durable Object and make us create it.
+
+### Seats are the lobby's to decide
+
+`MatchDO` never hands out a colour. The lobby calls `POST /seat` on the game the moment it
+pairs, and `/join` only records arrival. They were split once — the lobby telling each player
+a colour while the game seated whoever knocked first — and since those two orders differ, both
+players could be told it was not their turn, forever. One authority, decided at pairing.

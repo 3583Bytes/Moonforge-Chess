@@ -1,0 +1,39 @@
+@* Shared site footer.
+   One component rather than a hand-written <footer> per page: the four pages had drifted into
+   four different voices, three of which explained the implementation (WebAssembly, the
+   repository, the absence of a neural network) to an audience here to play chess. The
+   project's developer links live here, once, rather than competing with the board. *@
+
+<footer class="site-footer">
+    <nav class="footer-nav" aria-label="Site">
+        <NavLink href="" Match="NavLinkMatch.All">Play</NavLink>
+        <NavLink href="play-online">Online</NavLink>
+        <NavLink href="puzzle" Match="NavLinkMatch.All">Daily puzzle</NavLink>
+        <NavLink href="puzzle/practice">Practice</NavLink>
+        <NavLink href="openings">Openings</NavLink>
+        <NavLink href="review">Analyse</NavLink>
+        <NavLink href="vote">Vote chess</NavLink>
+    </nav>
+
+    <p class="footer-note">
+        @if (Note is not null)
+        {
+            @Note
+        }
+        else
+        {
+            <text>Free to play, no account, no ads.</text>
+        }
+    </p>
+
+    <a class="footer-source" href="https://github.com/3583Bytes/Moonforge-Chess"
+       target="_blank" rel="noreferrer">Open source ↗</a>
+</footer>
+
+@code {
+    /// <summary>
+    /// An optional line about this page in particular — puzzle sourcing, vote anonymity.
+    /// Anything a player would want to know; not how the page is built.
+    /// </summary>
+    [Parameter] public RenderFragment? Note { get; set; }
+}

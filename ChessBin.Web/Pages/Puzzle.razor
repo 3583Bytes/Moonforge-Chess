@@ -6,9 +6,7 @@
 
 <PageTitle>@(_isPractice ? "Chess Tactics Practice — Unlimited Puzzles | ChessBin" : "Daily Chess Puzzle — A New One Every Day | ChessBin")</PageTitle>
 
-<main class="site-shell">
-    <SiteHeader />
-
+<main class="page">
     <section class="hero puzzle-hero">
         <div>
             <p class="eyebrow">@(_isPractice ? $"Practice · {_practiceSolved} solved this session" : $"Daily puzzle · {Today:d MMMM yyyy}")</p>
@@ -220,10 +218,9 @@
         </section>
     }
 
-    <footer class="site-footer">
-        <span>Puzzles from the Lichess database, released under CC0.</span>
-        <span>Solved and scored on your device.</span>
-    </footer>
+    <SiteFooter>
+        <Note>Puzzles from the Lichess database (CC0), solved and scored on your device.</Note>
+    </SiteFooter>
 </main>
 
 @code {

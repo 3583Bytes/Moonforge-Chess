@@ -4,9 +4,7 @@
 
 <PageTitle>Chess Game Analysis — Paste a PGN | ChessBin</PageTitle>
 
-<main class="site-shell">
-    <SiteHeader />
-
+<main class="page">
     <section class="hero">
         <div>
             <p class="eyebrow">Game analysis · free · no signup</p>
@@ -22,8 +20,11 @@
         <div class="board-column">
             <section class="paste-panel">
                 <label class="paste-label" for="pgn">Paste PGN</label>
+                @* The placeholder comes from a C# constant, not an inline attribute: Razor emits
+                   an attribute's value literally, so HTML entities written here reach the browser
+                   as the text "&quot;" and "&#10;" rather than as a quote and a newline. *@
                 <textarea id="pgn" class="pgn-input" rows="12" spellcheck="false"
-                          placeholder="[Event &quot;Rated Blitz game&quot;]&#10;...&#10;&#10;1. e4 e5 2. Nf3 Nc6 3. Bc4 ..."
+                          placeholder="@PgnPlaceholder"
                           @bind="_pgn" @bind:event="oninput"></textarea>
 
                 <div class="paste-actions">
@@ -108,13 +109,14 @@
         </aside>
     </section>
 
-    <footer class="site-footer">
-        <span>Analysis runs on your device. Nothing you paste is uploaded.</span>
-        <span>Moonforge scores positions from named terms, not a neural network.</span>
-    </footer>
+    <SiteFooter>
+        <Note>Analysis runs on your device — nothing you paste is uploaded.</Note>
+    </SiteFooter>
 </main>
 
 @code {
+    private const string PgnPlaceholder = "[Event \"Rated Blitz game\"]\n...\n\n1. e4 e5 2. Nf3 Nc6 3. Bc4 ...";
+
     private string _pgn = string.Empty;
     private ChessPieceColor _side = ChessPieceColor.White;
     private PgnGame? _game;

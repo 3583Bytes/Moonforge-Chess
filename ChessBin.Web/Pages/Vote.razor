@@ -3,9 +3,7 @@
 
 <PageTitle>Community vs Moonforge | ChessBin</PageTitle>
 
-<main class="site-shell">
-    <SiteHeader />
-
+<main class="page">
     <section class="hero">
         <div>
             <p class="eyebrow">@Eyebrow</p>
@@ -31,14 +29,19 @@
     }
     else if (!_state.HasGame)
     {
+        @* Between games this used to send people to GitHub to "watch the repository" — asking
+           a chess player to use an issue tracker as a notification service. It now offers them
+           something to play instead. *@
         <section class="paste-panel vote-idle">
             <p class="boot-note">
-                No game is running at the moment. The next one will be announced on the repository —
-                when it starts, the board and the running vote count appear here.
+                No community game is running right now. When the next one starts, the board and
+                the running vote count appear here — check back, or play something else meanwhile.
             </p>
-            <a class="primary-button" href="https://github.com/3583Bytes/Moonforge-Chess" target="_blank" rel="noreferrer">
-                Watch the repository ↗
-            </a>
+            <nav class="boot-links" aria-label="Meanwhile">
+                <a href="puzzle">Today's puzzle</a>
+                <a href="">Play a game</a>
+                <a href="review">Analyse a game</a>
+            </nav>
         </section>
     }
     else
@@ -173,10 +176,9 @@
         </section>
     }
 
-    <footer class="site-footer">
-        <span>The board is a file in the repository; a scheduled job is the referee.</span>
-        <span>Votes are anonymous — no account, and nothing about you is stored.</span>
-    </footer>
+    <SiteFooter>
+        <Note>Votes are anonymous — no account, and nothing about you is stored.</Note>
+    </SiteFooter>
 </main>
 
 @code {

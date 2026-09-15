@@ -65,7 +65,10 @@ public sealed class RoutingTests
         {
             Assert.That(templates, Does.Contain("puzzle"), "the nav links to /puzzle");
             Assert.That(templates, Does.Contain("puzzle/practice"), "the daily puzzle links to /puzzle/practice");
+            Assert.That(templates, Does.Contain("openings"), "the nav links to /openings");
+            Assert.That(templates, Does.Contain("play-online"), "the nav links to /play-online");
             Assert.That(templates, Does.Contain("review"), "the nav links to /review");
+            Assert.That(templates, Does.Contain("vote"), "the nav links to /vote");
             Assert.That(templates, Does.Contain(""), "the brand links to /");
         });
     }

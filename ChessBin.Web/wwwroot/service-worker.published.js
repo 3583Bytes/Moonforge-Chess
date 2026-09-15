@@ -20,7 +20,8 @@ const precacheInclude = [/\.wasm$/, /\.js$/, /\.css$/, /\.html$/, /\.json$/, /\.
 // far too much to force on every install. Shards are cached on demand instead (see onFetch).
 // The community game's state changes on a schedule, so precaching it would show a stale
 // board to anyone who had installed the app. Fetched from the network every time instead.
-const precacheExclude = [/^service-worker\.js$/, /^puzzles\/shard-/, /^vote\/state\.json$/];
+const precacheExclude = [/^service-worker\.js$/, /^puzzles\/shard-/, /^openings\/shard-/,
+                         /^vote\/state\.json$/];
 
 async function onInstall() {
     const assets = self.assetsManifest.assets
@@ -79,10 +80,11 @@ async function onFetch(event) {
         }
     }
 
-    // Puzzle shards are immutable once generated, so once seen they never need refetching.
-    // Cache-on-first-use keeps the install light while still making yesterday's puzzle work
-    // on a train today.
-    if (sameOrigin && /\/puzzles\/.*\.json$/.test(url.pathname)) {
+    // Puzzle and opening shards are immutable once generated, so once seen they never need
+    // refetching. Cache-on-first-use keeps the install light — together they are over two
+    // megabytes — while still making yesterday's puzzle, and a line you have already walked,
+    // work on a train today.
+    if (sameOrigin && /\/(puzzles|openings)\/.*\.json$/.test(url.pathname)) {
         const cache = await caches.open(cacheName);
         const hit = await cache.match(request);
         if (hit) return hit;
@@ -91,7 +93,7 @@ async function onFetch(event) {
             if (response.ok) cache.put(request, response.clone());
             return response;
         } catch {
-            return new Response('', { status: 504, statusText: 'Offline and this puzzle was never loaded' });
+            return new Response('', { status: 504, statusText: 'Offline and this shard was never loaded' });
         }
     }
 

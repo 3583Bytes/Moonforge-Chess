@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "positions": 7928,
+  "moves": 8108,
+  "named": 3810,
+  "lines": 3810,
+  "shards": 64,
+  "shardBy": "FNV-1a 32-bit over the key, modulo shards",
+  "key": "first four FEN fields — placement, side, castling, en passant",
+  "source": "lichess-org/chess-openings (names, ECO) + the engine's own opening book (popularity)",
+  "license": "CC0-1.0",
+  "weight": "games in the engine book that continued this way; 0 means the book does not cover it"
+}

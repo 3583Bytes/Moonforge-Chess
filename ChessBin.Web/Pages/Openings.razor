@@ -1,0 +1,267 @@
+@page "/openings"
+@using ChessEngine.Engine
+
+<PageTitle>Chess Opening Explorer — Every Named Opening | ChessBin</PageTitle>
+
+<main class="page">
+    <section class="hero">
+        <div>
+            <p class="eyebrow">Opening explorer · free · no signup</p>
+            <h1>@Heading</h1>
+        </div>
+        <p class="intro">
+            Walk the openings move by move and see what every line is called. Names and ECO
+            codes for the whole of published theory — no account, and it works offline.
+        </p>
+    </section>
+
+    <section class="game-layout" aria-label="Opening explorer">
+        <div class="board-column">
+            <div class="player-strip opponent">
+                <div class="avatar moonforge-avatar" aria-hidden="true">♟</div>
+                <div>
+                    <strong>@PositionTitle</strong>
+                    <span>@SubTitle</span>
+                </div>
+                @if (_position?.Eco is string eco)
+                {
+                    <span class="rating-chip" title="ECO classification">@eco</span>
+                }
+            </div>
+
+            <div class="board-wrap">
+                <ChessBoardView Squares="Squares"
+                                WhiteAtBottom="true"
+                                Interactive="false"
+                                ShowCoordinates="true"
+                                Label="@($"Position after {_line.Count} half-moves")"
+                                LastFrom="_lastFrom"
+                                LastTo="_lastTo"
+                                MoveKey="_line.Count" />
+            </div>
+
+            <div class="player-strip">
+                <div class="avatar human-avatar" aria-hidden="true">@(_engine.WhoseMove == ChessPieceColor.White ? "W" : "B")</div>
+                <div>
+                    <strong>@(_engine.WhoseMove == ChessPieceColor.White ? "White" : "Black") to move</strong>
+                    <span>@(_line.Count == 0 ? "Starting position" : $"{_line.Count} half-moves in")</span>
+                </div>
+                <div class="move-navigation opening-nav" aria-label="Navigate the line">
+                    <button type="button" disabled="@(_line.Count == 0)" @onclick="ResetAsync" title="Back to the start">|◀</button>
+                    <button type="button" disabled="@(_line.Count == 0)" @onclick="BackAsync" title="Take back a move">◀</button>
+                </div>
+            </div>
+
+            @if (_line.Count > 0)
+            {
+                <p class="opening-line" aria-label="The line so far">
+                    @for (int i = 0; i < _line.Count; i++)
+                    {
+                        @if (i % 2 == 0)
+                        {
+                            <span class="move-number">@(i / 2 + 1).</span>
+                        }
+                        <span class="opening-line-move">@_line[i].San</span>
+                    }
+                </p>
+            }
+
+            <p class="status-line" aria-live="polite">
+                <span class="status-icon">@(_loading ? "◌" : "●")</span> @Status
+            </p>
+        </div>
+
+        <aside class="control-panel puzzle-panel">
+            <div class="panel-tabs">
+                <button type="button">Continuations</button>
+                <span>@(_position is null ? "—" : $"{_position.Moves.Count} named")</span>
+            </div>
+
+            <section class="panel-section">
+                @if (_error is not null)
+                {
+                    <p class="position-message">@_error</p>
+                    <div class="position-actions"><button type="button" @onclick="LoadAsync">Try again</button></div>
+                }
+                else if (_loading && _position is null)
+                {
+                    <p class="position-message">Looking this position up…</p>
+                }
+                else if (_position is null || _position.Moves.Count == 0)
+                {
+                    @* Running out of book is the normal end of a line, not a failure. *@
+                    <p class="position-message">
+                        Published theory stops here. Take a move back to try a different
+                        continuation, or carry on against the engine from this position.
+                    </p>
+                }
+                else
+                {
+                    <ul class="opening-moves">
+                        @foreach (OpeningMove move in _position.Moves)
+                        {
+                            <li @key="move.Uci">
+                                <button class="opening-move" type="button" @onclick="() => PlayAsync(move)">
+                                    <span class="opening-bar" style="width:@Share(move)%" aria-hidden="true"></span>
+                                    <span class="opening-san">@move.San</span>
+                                    <span class="opening-name">@(move.Name ?? "—")</span>
+                                    <span class="opening-weight">@WeightLabel(move)</span>
+                                </button>
+                            </li>
+                        }
+                    </ul>
+                    @if (TotalWeight == 0)
+                    {
+                        <p class="position-message opening-note">
+                            No popularity figures this deep — these are ordered by notation.
+                        </p>
+                    }
+                }
+            </section>
+
+            <section class="panel-section keep-going">
+                <a class="primary-button" href="@($"/?fen={Uri.EscapeDataString(_engine.FEN)}")">Play from this position</a>
+                <p class="position-message">Takes the position onto the board against Moonforge.</p>
+            </section>
+        </aside>
+    </section>
+
+    <SiteFooter>
+        <Note>Opening names and ECO codes from the Lichess chess-openings tables (CC0).</Note>
+    </SiteFooter>
+</main>
+
+@code {
+    private readonly Engine _engine = new(ChessGameSession.StartingFen);
+    private readonly List<(string San, string Uci)> _line = [];
+    private OpeningPosition? _position;
+    private bool _loading;
+    private string? _error;
+    private int _lastFrom = -1, _lastTo = -1;
+
+    [Inject] private OpeningExplorer Explorer { get; set; } = null!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _engine.GenerateValidMoves();
+        await LoadAsync();
+    }
+
+    private IReadOnlyList<BoardSquare> Squares =>
+        BoardView.Squares(_engine, whiteAtBottom: true, _lastFrom, _lastTo);
+
+    private string Heading => _position?.Name ?? "Where does this line go?";
+
+    /// <summary>
+    /// Three states, not two. A position can be absent from the data, or present but unnamed —
+    /// the starting position is the obvious case, and calling that one "not in the book" told
+    /// the visitor the opposite of the twenty continuations listed beside it.
+    /// </summary>
+    private string PositionTitle => _position is null
+        ? "Not in the book"
+        : _position.Name ?? (_line.Count == 0 ? "Starting position" : "Unnamed line");
+
+    private string SubTitle => _position is null
+        ? "Past published theory"
+        : _position.Name is not null ? "Opening"
+        : _line.Count == 0 ? "Pick a first move"
+        : "Between named lines";
+
+    private string Status => _error is not null
+        ? "The opening data didn't load."
+        : _loading ? "Looking up the position…"
+        : _position?.Moves.Count > 0 ? $"{_position.Moves.Count} named continuation{(_position.Moves.Count == 1 ? "" : "s")} from here."
+        : "No named continuations from here.";
+
+    /// <summary>
+    /// Total book weight at this position. Zero is common and not a problem: the engine's book
+    /// only covers mainline theory a few moves deep, while the name tables go much further.
+    /// </summary>
+    private int TotalWeight => _position?.Moves.Sum(m => m.Weight) ?? 0;
+
+    /// <summary>
+    /// Share of the book's games, as a bar width. Floored at 2% so a move that is played but
+    /// rarely still shows something rather than reading as "never played".
+    /// </summary>
+    private double Share(OpeningMove move)
+    {
+        int total = TotalWeight;
+        if (total == 0 || move.Weight == 0) return 0;
+        return Math.Max(2, Math.Round(move.Weight * 100d / total, 1));
+    }
+
+    private string WeightLabel(OpeningMove move)
+    {
+        int total = TotalWeight;
+        if (total == 0) return "—";
+        return move.Weight == 0 ? "rare" : $"{Math.Round(move.Weight * 100d / total)}%";
+    }
+
+    private async Task PlayAsync(OpeningMove move)
+    {
+        if (!PuzzleData.TryApplyUci(_engine, move.Uci)) return;
+
+        (_lastFrom, _lastTo) = SquaresOf(move.Uci);
+        _line.Add((move.San, move.Uci));
+        await LoadAsync();
+    }
+
+    /// <summary>
+    /// Replays the line from the start rather than undoing. A line is at most a couple of dozen
+    /// plies, so the simple version is fast enough and cannot drift out of step the way an
+    /// incremental undo could.
+    /// </summary>
+    private async Task RebuildAsync()
+    {
+        _engine.SetPosition(ChessGameSession.StartingFen);
+        _engine.GenerateValidMoves();
+
+        foreach ((_, string uci) in _line)
+        {
+            if (!PuzzleData.TryApplyUci(_engine, uci)) break;
+        }
+
+        (_lastFrom, _lastTo) = _line.Count > 0 ? SquaresOf(_line[^1].Uci) : (-1, -1);
+        await LoadAsync();
+    }
+
+    private async Task BackAsync()
+    {
+        if (_line.Count == 0) return;
+        _line.RemoveAt(_line.Count - 1);
+        await RebuildAsync();
+    }
+
+    private async Task ResetAsync()
+    {
+        _line.Clear();
+        await RebuildAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        StateHasChanged();
+
+        try
+        {
+            _position = await Explorer.LookupAsync(_engine.FEN);
+        }
+        catch (Exception ex)
+        {
+            _position = null;
+            _error = $"{ex.Message} You can retry, or come back in a moment.";
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>Board index is 0 = a8, 63 = h1 — the same convention the engine uses.</summary>
+    private static (int From, int To) SquaresOf(string uci) =>
+        uci.Length < 4 ? (-1, -1)
+        : ((uci[0] - 'a') + (8 - (uci[1] - '0')) * 8, (uci[2] - 'a') + (8 - (uci[3] - '0')) * 8);
+}

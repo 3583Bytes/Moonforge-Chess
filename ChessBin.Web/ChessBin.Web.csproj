@@ -23,6 +23,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ChessCoreEngine\ChessCoreEngine.csproj" />
+    <!-- The online game's rules. Referenced rather than reimplemented: with the server
+         deliberately knowing no chess, this is what validates the opponent's moves in the
+         browser, and it is already tested. See ChessBin.Web/OnlineSession.cs. -->
+    <ProjectReference Include="..\ChessBin.Online\ChessBin.Online.csproj" />
   </ItemGroup>
 
   <ItemGroup>

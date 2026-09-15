@@ -12,9 +12,9 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Play free chess against a real engine in your browser — no signup, nothing to install. Watch its evaluation and best line update as you play." />
+    <meta name="description" content="Play chess free against the computer, solve a puzzle a day, and have your games explained move by move — all in your browser. No signup, nothing to install." />
     <meta name="theme-color" content="#0d0f13" />
-    <title>Play Chess vs the Computer, See How It Thinks | ChessBin</title>
+    <title>Play Chess Online Free — vs the Computer | ChessBin</title>
     <base href="/" />
     <link rel="canonical" href="https://chessbin.com/" />
     <link rel="preload" id="webassembly" />
@@ -24,8 +24,8 @@
     <link rel="manifest" href="site.webmanifest" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="ChessBin" />
-    <meta property="og:title" content="ChessBin · Play chess against a real engine" />
-    <meta property="og:description" content="Play free chess against a real engine in your browser — no signup, nothing to install. Watch its evaluation and best line update as you play." />
+    <meta property="og:title" content="ChessBin · Play chess free online" />
+    <meta property="og:description" content="Play chess free against the computer, solve a puzzle a day, and have your games explained move by move — all in your browser. No signup, nothing to install." />
     <meta property="og:url" content="https://chessbin.com/" />
     <meta property="og:image" content="https://chessbin.com/brand/og-image.png" />
     <meta property="og:image:width" content="1200" />
@@ -45,53 +45,65 @@
       "browserRequirements": "Requires WebAssembly",
       "isAccessibleForFree": true,
       "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-      "description": "Play free chess against a real engine in your browser and watch its evaluation as you play."
+      "description": "Play chess free against the computer, solve a daily puzzle, and get your games analysed — all in the browser."
     }
     </script>
 </head>
 
 <body>
     <div id="app">
-        <main class="site-shell">
-            <header class="masthead">
-            <a class="brand" href="/" aria-label="ChessBin home">
-                <span class="brand-mark" aria-hidden="true">
-                    <img src="brand/chessbin-mark-72.png" width="72" height="59" alt="" />
-                </span>
-                <span>ChessBin</span>
-            </a>
-                <nav class="site-nav" aria-label="Sections">
-                <a href="/" class="active">Play</a>
-                <a href="/puzzle/">Daily puzzle</a>
-                <a href="/puzzle/practice/">Practice</a>
-                <a href="/review/">Analyse</a>
-                <a href="/vote/">Vote chess</a>
-                </nav>
-            </header>
-
-            <section class="hero">
-                <div>
-                    <p class="eyebrow">Free · no signup · nothing to install</p>
-                    <h1>Play chess. Find out why you lost.</h1>
-                </div>
-                <p class="intro">Play a game, solve today's puzzle, or paste a game from anywhere and have it explained. All free, all in your browser.</p>
-            </section>
-
-            <p class="boot-note">Everything runs on your device, so your games never leave the browser and it works with no connection once you have visited. When a game ends you get a review that says what each move cost and why — the part most sites charge for.</p>
-
-            <nav class="boot-links" aria-label="Go to">
-            <a href="/puzzle/">Today's chess puzzle</a>
-            <a href="/puzzle/practice/">Practice puzzles</a>
+        <div class="app-shell">
+            <nav class="site-nav" aria-label="Sections">
+                <a class="nav-brand" href="/" aria-label="ChessBin home">
+                    <span class="brand-mark" aria-hidden="true">
+                        <img src="brand/chessbin-mark-72.png" width="72" height="59" alt="" />
+                    </span>
+                    <span class="nav-wordmark">ChessBin</span>
+                </a>
+                <ul class="nav-list">
+                    <li><a href="/" class="active"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="7,4 20,12 7,20" /></svg><span>Play</span></a></li>
+                    <li><a href="/play-online/"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="8.4" r="3.1" /><circle cx="16" cy="8.4" r="3.1" /><path d="M2.8 19.4c0-2.7 2.3-4.6 5.2-4.6s5.2 1.9 5.2 4.6" /><path d="M13.4 15.2c.8-.3 1.7-.4 2.6-.4 2.9 0 5.2 1.9 5.2 4.6" /></svg><span>Online</span></a></li>
+                    <li><a href="/puzzle/"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2" /><line x1="3.5" y1="9.5" x2="20.5" y2="9.5" /><line x1="8" y1="2.8" x2="8" y2="6.5" /><line x1="16" y1="2.8" x2="16" y2="6.5" /><circle class="nav-icon-fill" cx="12" cy="15" r="2.1" /></svg><span>Puzzles</span></a></li>
+                    <li><a href="/openings/"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.2h5.4A2.6 2.6 0 0 1 12 7.8v11a2.2 2.2 0 0 0-2.2-2.2H4z" /><path d="M20 5.2h-5.4A2.6 2.6 0 0 0 12 7.8v11a2.2 2.2 0 0 1 2.2-2.2H20z" /></svg><span>Openings</span></a></li>
+                    <li><a href="/review/"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.6" /><line x1="15.6" y1="15.6" x2="20.5" y2="20.5" /><polyline points="8,12.2 10.3,9.4 12.4,11.4 14.2,8.6" /></svg><span>Analyse</span></a></li>
+                    <li><a href="/vote/"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.6" y="4.6" width="16.8" height="14.8" rx="2" /><polyline points="7.8,12.2 10.8,15.2 16.4,8.8" /></svg><span>Vote chess</span></a></li>
+                </ul>
             </nav>
+            <div class="app-main">
+                <a class="mobile-brand" href="/" aria-label="ChessBin home">
+                    <span class="brand-mark" aria-hidden="true">
+                        <img src="brand/chessbin-mark-72.png" width="72" height="59" alt="" />
+                    </span>
+                    <span class="nav-wordmark">ChessBin</span>
+                </a>
+                <main class="page">
+                    <section class="hero">
+                        <div>
+                            <p class="eyebrow">Free · no signup · nothing to install</p>
+                            <h1>Play chess. Find out why you lost.</h1>
+                        </div>
+                        <p class="intro">Play a game, solve today's puzzle, or paste a game from anywhere and have it explained. All free, all in your browser.</p>
+                    </section>
 
-            <div class="boot-status" role="status">
-                <svg class="loading-progress" viewBox="0 0 34 34" aria-hidden="true">
-                    <circle r="13" cx="17" cy="17" />
-                    <circle r="13" cx="17" cy="17" />
-                </svg>
-                <span class="loading-progress-text"></span>
+                    <p class="boot-note">Everything runs on your device, so your games never leave the browser and it works with no connection once you have visited. When a game ends you get a review that says what each move cost and why — the part most sites charge for.</p>
+
+                    <nav class="boot-links" aria-label="Go to">
+                        <a href="/puzzle/">Today's chess puzzle</a>
+                        <a href="/puzzle/practice/">Practice puzzles</a>
+                        <a href="/review/">Analyse a game</a>
+                        <a href="/vote/">Vote chess</a>
+                    </nav>
+
+                    <div class="boot-status" role="status">
+                        <svg class="loading-progress" viewBox="0 0 34 34" aria-hidden="true">
+                            <circle r="13" cx="17" cy="17" />
+                            <circle r="13" cx="17" cy="17" />
+                        </svg>
+                        <span class="loading-progress-text"></span>
+                    </div>
+                </main>
             </div>
-        </main>
+        </div>
     </div>
     <div id="blazor-error-ui">
         ChessBin hit an unexpected error.

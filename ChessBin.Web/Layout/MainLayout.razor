@@ -1,3 +1,20 @@
 @inherits LayoutComponentBase
 
-@Body
+@* The chrome lives here, not on each page. Five pages were each rendering their own
+   masthead, which is exactly how the nav drifted out of step between them and the boot
+   pages. A page now renders only its own content and its footer. *@
+
+<div class="app-shell">
+    <SiteNav />
+    <div class="app-main">
+        @* Phones only: the sidebar has become a bottom tab bar and taken the wordmark
+           with it, so the brand needs somewhere to live at the top of the page. *@
+        <a class="mobile-brand" href="" aria-label="ChessBin home">
+            <span class="brand-mark" aria-hidden="true">
+                <img src="brand/chessbin-mark-72.png" width="72" height="59" alt="" />
+            </span>
+            <span class="nav-wordmark">ChessBin</span>
+        </a>
+        @Body
+    </div>
+</div>

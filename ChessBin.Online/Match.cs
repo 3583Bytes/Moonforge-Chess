@@ -33,6 +33,12 @@ public enum MatchReason
     InsufficientMaterial,
     Agreement,
     Abandoned,
+    /// <summary>
+    /// The two players' engines disagreed about a move, and with no neutral arbiter the game
+    /// could not continue. Only reachable in the hosted game, where the server deliberately
+    /// knows no chess and both clients validate — see <c>server/src/match.ts</c>.
+    /// </summary>
+    Disputed,
 }
 
 /// <summary>Why a submitted move was refused. Every one of these is a thing a client can attempt.</summary>

@@ -64,7 +64,11 @@ public interface IVoteApi
 // Separate from VoteChess.cs's VoteJsonContext on purpose: that one writes state.json with a
 // camelCase policy and indentation, which is a file format. This one reads the Worker's wire
 // format. Same feature, two different contracts.
-[JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
+// CamelCase is not cosmetic here: the Worker reads body.token and body.san, so without a
+// naming policy these serialise as "Token"/"San" and every request is rejected as malformed.
+// PropertyNameCaseInsensitive only covers the reading half, which is why that alone was not
+// enough. VoteApiTests and PlayApiTests pin the exact bytes rather than just the values.
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true)]
 [JsonSerializable(typeof(VoteTallyDto))]
 [JsonSerializable(typeof(CastResponseDto))]
 [JsonSerializable(typeof(CastRequestDto))]

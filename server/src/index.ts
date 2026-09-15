@@ -10,6 +10,8 @@
  */
 
 export { VoteDO } from "./vote";
+export { MatchDO } from "./match";
+export { LobbyDO } from "./lobby";
 
 /**
  * Just the origin settings. Split out so {@link isAllowedOrigin} declares that it reads
@@ -24,11 +26,22 @@ export interface OriginConfig {
 
 export interface Env extends OriginConfig {
   VOTE: DurableObjectNamespace;
+  /** One object per game between two people. Named by the id the lobby hands out. */
+  MATCH: DurableObjectNamespace;
+  /** One object for the whole lobby, so pairing is strongly consistent. */
+  LOBBY: DurableObjectNamespace;
   /** Shared secret for the vote-chess referee. Set with `wrangler secret put REFEREE_SECRET`. */
   REFEREE_SECRET?: string;
 }
 
 const LOOPBACK = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/;
+
+/**
+ * `/play/<match id>/<action>`. The id is pinned to the UUID shape the lobby actually issues,
+ * so a caller cannot name an arbitrary Durable Object and make us create it.
+ */
+const PLAY_ROUTE =
+  /^\/play\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(join|state|move|resign|draw|decline|abort|dispute)$/;
 
 /**
  * Whether a browser origin may call this API.
@@ -163,6 +176,41 @@ export default {
 
     if (pathname === "/vote/tally" && request.method === "GET") {
       return relay(await votes().fetch("https://vote/tally"), origin);
+    }
+
+    // Player-versus-player. The lobby pairs, then each game is its own object.
+    //
+    // Note what is NOT enforced here: legality. The server owns seats, turn order and clocks;
+    // Moonforge in each player's browser owns the rules. See the header of src/match.ts for
+    // why that is safe and what it costs.
+    if (pathname === "/play/seek" || pathname === "/play/cancel") {
+      if (request.method !== "POST") return json({ error: "not_found" }, origin, 404);
+
+      const lobby = env.LOBBY.get(env.LOBBY.idFromName("lobby"));
+      const action = pathname === "/play/seek" ? "seek" : "cancel";
+      return relay(await lobby.fetch(`https://lobby/${action}`, {
+        method: "POST",
+        body: await request.text(),
+      }), origin);
+    }
+
+    const play = PLAY_ROUTE.exec(pathname);
+    if (play !== null) {
+      const matchId = play[1]!;
+      const action = play[2]!;
+
+      // A GET carries its token in the query string; everything else carries it in the body.
+      const wanted = action === "state" ? "GET" : "POST";
+      if (request.method !== wanted) return json({ error: "not_found" }, origin, 404);
+
+      const match = env.MATCH.get(env.MATCH.idFromName(matchId));
+      const target = new URL(`https://match/${action}`);
+      if (action === "state") target.searchParams.set("token", new URL(request.url).searchParams.get("token") ?? "");
+
+      return relay(await match.fetch(target.toString(), {
+        method: wanted,
+        body: wanted === "POST" ? await request.text() : undefined,
+      }), origin);
     }
 
     // Referee routes. A shared secret rather than an origin check, because the caller is

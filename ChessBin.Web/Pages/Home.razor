@@ -3,11 +3,9 @@
 @implements IDisposable
 @using System.Text.Json
 
-<PageTitle>Play Chess vs the Computer, See How It Thinks | ChessBin</PageTitle>
+<PageTitle>Play Chess Online Free — vs the Computer | ChessBin</PageTitle>
 
-<main class="site-shell @(_lightBoard ? "light-theme" : "")">
-    <SiteHeader />
-
+<main class="page @(_lightBoard ? "light-theme" : "")">
     <section class="hero">
         <div>
             <p class="eyebrow">Free · no signup · nothing to install</p>
@@ -245,49 +243,66 @@
         </aside>
     </section>
 
-    <section class="project-section" aria-labelledby="about-moonforge">
+    @* The slot below the board used to hold four links to GitHub — source, README, releases,
+       issue tracker. That is the most valuable space on the site and it was pointing everyone
+       who came here to play at a developer's repository. It now points them at the rest of
+       the site instead; the project links live once, in the footer. *@
+    <section class="project-section" aria-labelledby="explore-chessbin">
         <div class="project-intro">
             <p class="eyebrow">Free forever · no account</p>
-            <h2 id="about-moonforge">Everything here is free,<br /><em>and stays on your device.</em></h2>
+            <h2 id="explore-chessbin">More ways<br /><em>to play.</em></h2>
         </div>
 
         <div class="project-copy">
             <p>
-                Play as many games as you like against Moonforge, solve a new puzzle every day,
-                and get any game explained move by move — including games you played somewhere
-                else. There is no sign-up, no paywall on the analysis, and no advertising.
+                Play as many games as you like, solve a new puzzle every day, and get any game
+                explained move by move — including games you played somewhere else. No sign-up,
+                no paywall on the analysis, and no advertising.
             </p>
             <p>
-                Everything runs on your own device, so your games never leave the browser. That
-                also means it works with no connection once you have visited.
+                Everything runs on your own device, so your games never leave the browser — and
+                once you have visited, it all works with no connection.
             </p>
-            <p class="how-to-play"><strong>How to play:</strong> click one of your pieces, then a highlighted square. When a game ends you get a review that says what each move cost and why — the part most sites charge for.</p>
-
-            <nav class="project-links" aria-label="Moonforge project links">
-                <a class="project-link primary" href="https://github.com/3583Bytes/Moonforge-Chess" target="_blank" rel="noreferrer">
-                    <span>View source</span>
-                    <strong>GitHub ↗</strong>
-                </a>
-                <a class="project-link" href="https://github.com/3583Bytes/Moonforge-Chess#readme" target="_blank" rel="noreferrer">
-                    <span>How the engine works</span>
-                    <strong>For developers ↗</strong>
-                </a>
-                <a class="project-link" href="https://github.com/3583Bytes/Moonforge-Chess/releases" target="_blank" rel="noreferrer">
-                    <span>Desktop engine</span>
-                    <strong>Releases ↗</strong>
-                </a>
-                <a class="project-link" href="https://github.com/3583Bytes/Moonforge-Chess/issues" target="_blank" rel="noreferrer">
-                    <span>Ideas and bugs</span>
-                    <strong>Issue tracker ↗</strong>
-                </a>
-            </nav>
+            <p class="how-to-play"><strong>New to this?</strong> Click one of your pieces, then a highlighted square. When a game ends you get a review that says what each move cost and why — the part most sites charge for.</p>
         </div>
+
+        @* Full-width, spanning both columns of .project-section: four cards in the right-hand
+           copy column would leave the left column empty for its whole height. *@
+        <nav class="feature-cards" aria-label="More on ChessBin">
+            <a class="feature-card" href="play-online">
+                <span class="feature-glyph" aria-hidden="true">♚</span>
+                <strong>Play someone</strong>
+                <span>Get matched with another person looking for a game. No account needed.</span>
+            </a>
+            <a class="feature-card" href="puzzle">
+                <span class="feature-glyph" aria-hidden="true">♞</span>
+                <strong>Daily puzzle</strong>
+                <span>One position a day from a real game, the same for everyone. Keep a streak going.</span>
+            </a>
+            <a class="feature-card" href="puzzle/practice">
+                <span class="feature-glyph" aria-hidden="true">♟</span>
+                <strong>Practice</strong>
+                <span>Unlimited tactics by difficulty. Nothing here touches your daily streak.</span>
+            </a>
+            <a class="feature-card" href="openings">
+                <span class="feature-glyph" aria-hidden="true">♝</span>
+                <strong>Opening explorer</strong>
+                <span>Walk every named opening move by move and see what each line is called.</span>
+            </a>
+            <a class="feature-card" href="review">
+                <span class="feature-glyph" aria-hidden="true">♜</span>
+                <strong>Analyse a game</strong>
+                <span>Paste a game from Lichess, Chess.com or anywhere and see what each move cost.</span>
+            </a>
+            <a class="feature-card" href="vote">
+                <span class="feature-glyph" aria-hidden="true">♛</span>
+                <strong>Vote chess</strong>
+                <span>Everyone picks one move a day against the engine. Majority gets played.</span>
+            </a>
+        </nav>
     </section>
 
-    <footer class="site-footer">
-        <span>Moonforge Chess runs locally in WebAssembly.</span>
-        <span>Open source on GitHub.</span>
-    </footer>
+    <SiteFooter />
 </main>
 
 @code {

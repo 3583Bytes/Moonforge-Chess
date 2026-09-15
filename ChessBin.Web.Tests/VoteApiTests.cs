@@ -120,7 +120,11 @@ public class VoteApiTests
         CastResult result = await api.CastAsync("token-abcdefgh", "e4");
 
         Assert.That(handler.RequestedUri?.AbsoluteUri, Is.EqualTo("https://api.test/vote/cast"));
-        Assert.That(handler.RequestBody, Does.Contain("token-abcdefgh").And.Contain("e4"));
+
+        // Pinned exactly, not just "contains": the Worker reads body.token and body.san, so a
+        // property that serialises as "Token" is silently rejected as a malformed ballot. That
+        // is invisible to a test that only checks the values are in there somewhere.
+        Assert.That(handler.RequestBody, Is.EqualTo("""{"token":"token-abcdefgh","san":"e4"}"""));
         Assert.That(result.Recorded, Is.True);
         Assert.That(result.Choice, Is.EqualTo("e4"));
     }

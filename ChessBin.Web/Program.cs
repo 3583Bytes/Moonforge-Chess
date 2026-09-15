@@ -17,4 +17,14 @@ if (!apiBaseUrl.EndsWith('/')) apiBaseUrl += "/";   // else a relative path repl
 
 builder.Services.AddScoped<IVoteApi>(_ => new HttpVoteApi(new HttpClient { BaseAddress = new Uri(apiBaseUrl) }));
 
+// The opening explorer reads committed static JSON from the site itself, so it takes the
+// site's own client rather than the API one. Scoped, so the shards it fetches stay cached
+// for the session instead of being re-downloaded on every navigation.
+builder.Services.AddScoped(sp => new OpeningExplorer(sp.GetRequiredService<HttpClient>()));
+
+// Online games go through the same Worker as the votes, so they share its base address. The
+// Worker owns seats, turn order and clocks; the rules stay here, in the browser — see
+// ChessBin.Web/OnlineSession.cs.
+builder.Services.AddScoped<IPlayApi>(_ => new HttpPlayApi(new HttpClient { BaseAddress = new Uri(apiBaseUrl) }));
+
 await builder.Build().RunAsync();

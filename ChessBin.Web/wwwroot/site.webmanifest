@@ -33,6 +33,12 @@
       "description": "Unlimited tactics by difficulty"
     },
     {
+      "name": "Opening explorer",
+      "short_name": "Openings",
+      "url": "/openings/",
+      "description": "Walk every named chess opening"
+    },
+    {
       "name": "Analyse a game",
       "short_name": "Analyse",
       "url": "/review/",
