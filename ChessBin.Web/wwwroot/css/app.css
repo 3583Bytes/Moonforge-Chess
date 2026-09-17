@@ -165,6 +165,10 @@ button:focus-visible, select:focus-visible, a:focus-visible {
 .primary-button:hover:not(:disabled) { background: linear-gradient(#fbd75f, #edb00a); }
 /* The button styling assumes a <button> in a grid; anchors need the layout stated. */
 a.primary-button { grid-column: auto; display: inline-grid; place-items: center; margin-top: 0; padding: 0 18px; text-decoration: none; }
+/* Same footprint as .primary-button, none of the urgency. For the action that sits beside
+   the real one — cancelling a search should not out-shout the offer to play instead. */
+.ghost-button { grid-column: 1 / -1; height: 44px; margin-top: 3px; padding: 0 14px; color: #cfc6bb; border: 1px solid #343940; border-radius: 7px; background: #1a1d22; cursor: pointer; font: 600 15px/1 var(--font-ui); }
+.ghost-button:hover { color: var(--gold-bright); border-color: var(--gold-line); }
 button:disabled { cursor: not-allowed; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 13px; }
 .section-heading h2 { margin: 0; font: 600 13.5px/1.2 var(--font-ui); }

@@ -512,6 +512,19 @@
             _fenInput = fen;
             LoadFen();
         }
+        else
+        {
+            // Sent here by the online lobby when nobody was about. It carries the time control
+            // the player had already picked, so they do not have to choose it a second time —
+            // and the game starts, because they pressed a button that said it would.
+            string? timeControl = await Js.InvokeAsync<string?>("chessBin.getQueryValue", "tc");
+            if (timeControl is "Bullet" or "Blitz" or "Rapid" or "Unlimited")
+            {
+                _selectedTimeControl = timeControl;
+                await StartNewGameAsync();
+            }
+        }
+
         await InvokeAsync(StateHasChanged);
     }
 

@@ -14,7 +14,12 @@ export default defineConfig({
         // The referee secret is a real secret in production (`wrangler secret put`), so it
         // is declared here rather than committed to wrangler.jsonc or read from .dev.vars —
         // that keeps the suite self-contained on a fresh clone.
-        bindings: { REFEREE_SECRET: "test-referee-secret" },
+        bindings: {
+          REFEREE_SECRET: "test-referee-secret",
+          // Five minutes is not something a test can wait for, and a seek that never ages out
+          // is precisely the bug these guard against. Milliseconds here, minutes in production.
+          SEEK_TIMEOUT_MS: "150",
+        },
       },
     }),
   ],

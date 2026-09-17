@@ -55,12 +55,38 @@
 
                     @if (_session.Phase == OnlinePhase.Seeking)
                     {
-                        <button class="primary-button" type="button" @onclick="CancelAsync">Cancel search</button>
+                        <button class="ghost-button" type="button" @onclick="CancelAsync">Cancel search</button>
                     }
                     else
                     {
                         <button class="primary-button" type="button" @onclick="SeekAsync">Find an opponent</button>
                     }
+                </section>
+
+                @if (_session.NobodyAbout)
+                {
+                    @* Offered, never substituted. Passing an engine off as a person is the one
+                       thing that would cost this real trust, and Moonforge is a nav item away
+                       anyway — so there is nothing to gain by being coy about it. *@
+                    <section class="panel-section">
+                        <div class="section-heading"><h2>It's quiet right now</h2><span>nobody waiting</span></div>
+                        <p class="position-message">
+                            No one else is looking for a game at this time control. You can keep
+                            waiting, send someone a link, or play the engine instead.
+                        </p>
+                        <a class="primary-button" href="@($"/?tc={_timeControl}")">Play Moonforge at @TimeControlLabel</a>
+                    </section>
+                }
+
+                <section class="panel-section">
+                    <div class="section-heading"><h2>Play a friend</h2><span>no account</span></div>
+                    <p class="position-message">
+                        Set up a game and send the link to whoever you want to play. Whoever
+                        opens it first takes the other seat.
+                    </p>
+                    <div class="position-actions">
+                        <button type="button" @onclick="ChallengeAsync">Create a link</button>
+                    </div>
                 </section>
 
                 <section class="panel-section">
@@ -136,6 +162,19 @@
                     <button type="button">Game</button>
                     <span>@(_session.Seat == Seat.White ? "White" : "Black")</span>
                 </div>
+
+                @if (_session.ChallengeId is not null && _session.Phase == OnlinePhase.Seated)
+                {
+                    <section class="panel-section">
+                        <div class="section-heading"><h2>Send this link</h2><span>waiting</span></div>
+                        <input class="fen-input" readonly value="@ChallengeLink" aria-label="Link to this game"
+                               @onfocus="SelectAllAsync" />
+                        <div class="position-actions">
+                            <button type="button" @onclick="CopyLinkAsync">@_copyLabel</button>
+                            <button type="button" @onclick="CancelAsync">Cancel</button>
+                        </div>
+                    </section>
+                }
 
                 @if (_session.View?.DrawOfferedToYou == true && _session.Phase == OnlinePhase.Playing)
                 {
@@ -223,11 +262,13 @@
 
     private OnlineSession? _session;
     private string _timeControl = "Blitz";
+    private string _copyLabel = "Copy link";
     private System.Threading.Timer? _poll;
     private System.Threading.Timer? _tick;
 
     [Inject] private IPlayApi Play { get; set; } = null!;
     [Inject] private IJSRuntime Js { get; set; } = null!;
+    [Inject] private NavigationManager Nav { get; set; } = null!;
 
     private string Heading => _session?.Phase switch
     {
@@ -237,6 +278,16 @@
     };
 
     private string PhaseLabel => _session?.Phase == OnlinePhase.Seated ? "waiting" : "in progress";
+
+    private string TimeControlLabel => _timeControl switch
+    {
+        "Bullet" => "1 + 0",
+        "Rapid" => "10 + 0",
+        "Unlimited" => "no clock",
+        _ => "3 + 2",
+    };
+
+    private string ChallengeLink => $"{Nav.BaseUri}play-online?join={_session?.ChallengeId}";
 
     private string StatusIcon => _session?.Phase switch
     {
@@ -270,6 +321,17 @@
         _poll = new System.Threading.Timer(async _ => await PollAsync(), null, 1_000, 1_200);
         _tick = new System.Threading.Timer(_ => _ = InvokeAsync(StateHasChanged), null, 250, 250);
 
+        // Arrived from an invitation: take the seat straight away rather than making the
+        // visitor work out that they were supposed to press something.
+        string? invitation = await Js.InvokeAsync<string?>("chessBin.getQueryValue", "join");
+        if (!string.IsNullOrWhiteSpace(invitation))
+        {
+            // Dropped from the address bar first, so a refresh after the game ends does not
+            // try to rejoin a seat that is long gone.
+            await Js.InvokeVoidAsync("chessBin.dropQueryValue", "join");
+            await _session.JoinByLinkAsync(invitation);
+        }
+
         await InvokeAsync(StateHasChanged);
     }
 
@@ -290,6 +352,24 @@
         if (_session is null) return;
         await _session.CancelSeekAsync();
     }
+
+    private async Task ChallengeAsync()
+    {
+        if (_session is null) return;
+
+        _copyLabel = "Copy link";
+        await _session.CreateChallengeAsync(Clock());
+    }
+
+    private async Task CopyLinkAsync()
+    {
+        await Js.InvokeVoidAsync("chessBin.copyText", ChallengeLink);
+        _copyLabel = "Copied";
+    }
+
+    /// <summary>A link nobody can select is a link nobody can send when the clipboard is blocked.</summary>
+    private async Task SelectAllAsync(FocusEventArgs _) =>
+        await Js.InvokeVoidAsync("chessBin.selectAll", "input[aria-label='Link to this game']");
 
     private async Task ResignAsync()
     {

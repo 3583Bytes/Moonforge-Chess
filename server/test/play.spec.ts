@@ -36,6 +36,11 @@ interface SeekResult {
 const seek = async (token: string, clock = BLITZ): Promise<SeekResult> =>
   (await post("/play/seek", { token, clock })).json();
 
+const openChallenge = async (token: string, clock = BLITZ, seat?: "white" | "black"): Promise<SeekResult> =>
+  (await post("/play/open", { token, clock, seat })).json();
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 interface MatchView {
   status: "waiting" | "playing" | "finished";
   outcome: "none" | "white" | "black" | "draw" | "aborted";
@@ -168,6 +173,116 @@ describe("the lobby", () => {
     const result = await seek("short");
     expect(result.ok).toBe(false);
     expect(result.reason).toBe("bad_token");
+  });
+
+  it("drops a seek from a tab that went away", async () => {
+    await seek(ALICE);
+    await wait(200);                       // SEEK_TIMEOUT_MS is 150ms under test
+
+    const bob = await seek(BOB);
+    expect(bob.queued).toBe(true);
+    expect(bob.paired).toBeUndefined();
+  });
+
+  /**
+   * The regression this replaces: a client polls the lobby about once a second to find out
+   * whether it has been paired, and every one of those polls used to re-stamp the waiter as
+   * having just arrived. Nobody could ever age out, so the timeout above was dead code and an
+   * abandoned tab sat in the queue for as long as the browser was open.
+   */
+  it("does not restart the wait clock every time a client polls", async () => {
+    await seek(ALICE);
+    await wait(90);
+    await seek(ALICE);                     // a poll, well inside the timeout
+    await wait(90);                        // now past it, counting from the *first* ask
+
+    const bob = await seek(BOB);
+    expect(bob.queued).toBe(true);
+    expect(bob.paired).toBeUndefined();
+  });
+
+  it("starts the clock again when the player asks for a different time control", async () => {
+    await seek(ALICE, BLITZ);
+    await wait(90);
+    await seek(ALICE, RAPID);              // a genuinely new request
+    await wait(90);
+
+    // Alice's rapid seek is only 90ms old, so it is still live.
+    const bob = await seek(BOB, RAPID);
+    expect(bob.paired).toBe(true);
+  });
+});
+
+describe("challenge links", () => {
+  it("creates a game with one seat left open", async () => {
+    const challenge = await openChallenge(ALICE);
+
+    expect(challenge.ok).toBe(true);
+    expect(challenge.matchId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(challenge.seat).toBe("white");
+  });
+
+  it("lets whoever opens the link take the other seat", async () => {
+    const challenge = await openChallenge(ALICE);
+    const id = challenge.matchId!;
+
+    const creator = await join(id, ALICE);
+    expect(creator.seat).toBe("white");
+    expect(creator.state!.status).toBe("waiting");
+
+    const friend = await join(id, BOB);
+    expect(friend.seat).toBe("black");
+    expect(friend.state!.status).toBe("playing");
+  });
+
+  it("honours the side the creator chose", async () => {
+    const challenge = await openChallenge(ALICE, BLITZ, "black");
+    expect(challenge.seat).toBe("black");
+
+    await join(challenge.matchId!, ALICE);
+    const friend = await join(challenge.matchId!, BOB);
+    expect(friend.seat).toBe("white");
+  });
+
+  it("only seats the first person to open the link", async () => {
+    const id = (await openChallenge(ALICE)).matchId!;
+    await join(id, ALICE);
+    await join(id, BOB);
+
+    const latecomer = await join(id, CAROL);
+    expect(latecomer.ok).toBe(false);
+    expect(latecomer.reason).toBe("unknown_player");
+  });
+
+  it("does not let the creator play themselves", async () => {
+    const id = (await openChallenge(ALICE)).matchId!;
+
+    // Opening your own link twice re-seats you, it does not fill the other chair.
+    const first = await join(id, ALICE);
+    const second = await join(id, ALICE);
+
+    expect(first.seat).toBe("white");
+    expect(second.seat).toBe("white");
+    expect(second.state!.status).toBe("waiting");
+  });
+
+  /** A lobby pairing has both seats spoken for, so the link trick must not work on one. */
+  it("leaves no open seat on a game the lobby paired", async () => {
+    await seek(ALICE);
+    const id = (await seek(BOB)).matchId!;
+
+    const gatecrasher = await join(id, CAROL);
+    expect(gatecrasher.ok).toBe(false);
+    expect(gatecrasher.reason).toBe("unknown_player");
+  });
+
+  it("refuses a second challenge on the same game", async () => {
+    const id = (await openChallenge(ALICE)).matchId!;
+
+    // The id is a UUID the server minted, so this is not reachable in practice — but the
+    // guard is what stops a replayed request wiping a game in progress.
+    const again = await post(`/play/${id}/join`, { token: BOB });
+    expect(again.status).toBe(200);
   });
 });
 

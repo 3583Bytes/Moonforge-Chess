@@ -70,6 +70,9 @@ public sealed class OnlineSession(IPlayApi api, string playerToken)
     /// </summary>
     private bool _opponentSeen;
 
+    /// <summary>When the current search began, so the page can stop pretending after a while.</summary>
+    private DateTimeOffset _seekingSince = DateTimeOffset.UtcNow;
+
     public event Action? StateChanged;
 
     public OnlinePhase Phase { get; private set; } = OnlinePhase.Idle;
@@ -81,6 +84,19 @@ public sealed class OnlineSession(IPlayApi api, string playerToken)
 
     /// <summary>Set when this browser's engine rejected a move the server reported.</summary>
     public bool Disputed { get; private set; }
+
+    /// <summary>
+    /// The game this browser created to send to someone. Null unless it made one — a game it
+    /// was paired into has no link worth sharing, because both seats are already spoken for.
+    /// </summary>
+    public string? ChallengeId { get; private set; }
+
+    /// <summary>
+    /// True once a search has gone on long enough to be worth admitting nobody is about. The
+    /// page offers Moonforge at that point; it never substitutes one silently, because passing
+    /// an engine off as a person is the one thing that would cost this real trust.
+    /// </summary>
+    public bool NobodyAbout { get; private set; }
 
     public bool HasPendingPromotion => _promotion is not null;
     public bool IsMyTurn => Phase == OnlinePhase.Playing && View is not null && Seat == View.ToMove;
@@ -114,10 +130,52 @@ public sealed class OnlineSession(IPlayApi api, string playerToken)
         _clock = clock;
         Reset();
         Phase = OnlinePhase.Seeking;
+        _seekingSince = DateTimeOffset.UtcNow;
         Status = "Looking for an opponent…";
         Changed();
 
         await PollAsync();
+    }
+
+    /// <summary>
+    /// Makes a game with one seat left open and holds on to its id, so the page can hand the
+    /// player a link. Nobody is queued and nothing is matched: the invitation travels by
+    /// whatever the player already uses to talk to the person they want to play.
+    /// </summary>
+    public async Task CreateChallengeAsync(MatchClock clock)
+    {
+        ArgumentNullException.ThrowIfNull(clock);
+
+        _clock = clock;
+        Reset();
+        Status = "Setting up a game…";
+        Changed();
+
+        ChallengeOutcome outcome = await _api.OpenChallengeAsync(_token, clock);
+        if (!outcome.Created)
+        {
+            Status = "Could not set up a game just now. Try again in a moment.";
+            Changed();
+            return;
+        }
+
+        MatchId = outcome.MatchId;
+        ChallengeId = outcome.MatchId;
+        Seat = outcome.Seat;
+        await JoinAsync();
+    }
+
+    /// <summary>Opens a game someone sent a link to, taking the seat they left.</summary>
+    public async Task JoinByLinkAsync(string matchId)
+    {
+        if (string.IsNullOrWhiteSpace(matchId)) return;
+
+        Reset();
+        MatchId = matchId;
+        Status = "Joining the game…";
+        Changed();
+
+        await JoinAsync();
     }
 
     /// <summary>True while a request is in flight; the page uses it to skip a timer tick.</summary>
@@ -177,8 +235,11 @@ public sealed class OnlineSession(IPlayApi api, string playerToken)
         if (outcome.Queued)
         {
             Waiting = outcome.Waiting;
+            NobodyAbout = DateTimeOffset.UtcNow - _seekingSince > QuietAfter;
+
             Status = outcome.Waiting > 1
                 ? $"Waiting for an opponent — {outcome.Waiting} in the queue."
+                : NobodyAbout ? "Still looking — it is quiet right now."
                 : "Waiting for an opponent…";
         }
         else
@@ -191,8 +252,19 @@ public sealed class OnlineSession(IPlayApi api, string playerToken)
 
     private async Task JoinAsync()
     {
-        MatchView? view = await _api.JoinAsync(MatchId!, _token);
-        if (view is null)
+        JoinOutcome outcome = await _api.JoinAsync(MatchId!, _token);
+
+        if (outcome.Refused)
+        {
+            // A dead end, not a blip: the seat has gone or the game is over. Retrying would
+            // just spin, so say so and put the player back where they can do something.
+            Reset();
+            Status = "That game is not open — someone else took the seat, or it has finished.";
+            Changed();
+            return;
+        }
+
+        if (outcome.View is not MatchView view)
         {
             Status = "Found a game, but could not join it. Retrying…";
             Changed();
@@ -322,7 +394,9 @@ public sealed class OnlineSession(IPlayApi api, string playerToken)
         if (!_opponentSeen)
         {
             Phase = OnlinePhase.Seated;
-            Status = "Waiting for your opponent to arrive…";
+            Status = ChallengeId is null
+                ? "Waiting for your opponent to arrive…"
+                : "Send the link to whoever you want to play — the game starts when they open it.";
             return;
         }
 
@@ -538,6 +612,8 @@ public sealed class OnlineSession(IPlayApi api, string playerToken)
         _promotion = null;
         Disputed = false;
         _opponentSeen = false;
+        NobodyAbout = false;
+        ChallengeId = null;
         MatchId = null;
         Seat = null;
         View = null;
@@ -580,6 +656,13 @@ public sealed class OnlineSession(IPlayApi api, string playerToken)
     }
 
     private void Changed() => StateChanged?.Invoke();
+
+    /// <summary>
+    /// How long to search before admitting the lobby is empty. Long enough not to give up on a
+    /// site that has people on it, short enough that a player on a quiet one is not left
+    /// staring at a spinner wondering whether the feature works.
+    /// </summary>
+    private static readonly TimeSpan QuietAfter = TimeSpan.FromSeconds(25);
 
     private sealed record PendingPromotion(int FromColumn, int FromRow, int ToColumn, int ToRow);
 }

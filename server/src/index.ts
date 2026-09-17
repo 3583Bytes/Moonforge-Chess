@@ -194,6 +194,25 @@ export default {
       }), origin);
     }
 
+    // A challenge link: mint a game with one seat left open, and hand back its id. No lobby
+    // involved — the whole point is that the invitation travels by whatever means the player
+    // already uses to talk to their friend.
+    if (pathname === "/play/open") {
+      if (request.method !== "POST") return json({ error: "not_found" }, origin, 404);
+
+      const matchId = crypto.randomUUID();
+      const match = env.MATCH.get(env.MATCH.idFromName(matchId));
+      const created = await match.fetch("https://match/open", {
+        method: "POST",
+        body: await request.text(),
+      });
+
+      if (!created.ok) return relay(created, origin);
+
+      const { seat } = (await created.json()) as { seat: string };
+      return json({ ok: true, matchId, seat }, origin);
+    }
+
     const play = PLAY_ROUTE.exec(pathname);
     if (play !== null) {
       const matchId = play[1]!;

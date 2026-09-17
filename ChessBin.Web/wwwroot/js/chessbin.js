@@ -154,6 +154,15 @@ window.chessBin = {
     exportProgress: () => window.chessBinStore.all(),
     importProgress: json => window.chessBinStore.putAll(json),
     getFenFromUrl: () => new URLSearchParams(window.location.search).get("fen"),
+    getQueryValue: name => new URLSearchParams(window.location.search).get(name),
+    selectAll: selector => document.querySelector(selector)?.select(),
+    // Drops a parameter without reloading, so an invitation link that has been accepted does
+    // not rejoin the same game every time the page is refreshed.
+    dropQueryValue: name => {
+        const url = new URL(window.location.href);
+        url.searchParams.delete(name);
+        window.history.replaceState({}, "", url);
+    },
     shareFen: async fen => {
         const url = new URL(window.location.href);
         url.searchParams.set("fen", fen);

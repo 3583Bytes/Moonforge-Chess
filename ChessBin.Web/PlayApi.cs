@@ -30,6 +30,26 @@ public sealed record MatchView(
     public bool IsOver => Status == MatchStatus.Finished;
 }
 
+/// <summary>
+/// What came of trying to sit down at a game. The reason matters: a link whose game is already
+/// full is a dead end the player needs telling about, while a dropped request is worth retrying,
+/// and both look identical if all you get back is null.
+/// </summary>
+public sealed record JoinOutcome(MatchView? View, string? Reason)
+{
+    public static readonly JoinOutcome Unreachable = new(null, null);
+
+    /// <summary>The server answered, and the answer was no. Retrying will not help.</summary>
+    public bool Refused => View is null && Reason is not null;
+}
+
+/// <summary>A game created from a challenge link, waiting for whoever is sent it.</summary>
+public sealed record ChallengeOutcome(string? MatchId, Seat? Seat)
+{
+    public static readonly ChallengeOutcome Failed = new(null, null);
+    public bool Created => MatchId is not null;
+}
+
 /// <summary>What came of asking for a game.</summary>
 public sealed record SeekOutcome(bool Paired, bool Queued, string? MatchId, Seat? Seat, int Waiting)
 {
@@ -49,7 +69,11 @@ public interface IPlayApi
 
     Task CancelSeekAsync(string token, CancellationToken cancellationToken = default);
 
-    Task<MatchView?> JoinAsync(string matchId, string token, CancellationToken cancellationToken = default);
+    /// <summary>Creates a game with one seat open, for sending to a friend.</summary>
+    Task<ChallengeOutcome> OpenChallengeAsync(string token, MatchClock clock, Seat? side = null,
+                                              CancellationToken cancellationToken = default);
+
+    Task<JoinOutcome> JoinAsync(string matchId, string token, CancellationToken cancellationToken = default);
 
     Task<MatchView?> StateAsync(string matchId, string token, CancellationToken cancellationToken = default);
 
@@ -70,6 +94,7 @@ public interface IPlayApi
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true)]
 [JsonSerializable(typeof(SeekResponseDto))]
 [JsonSerializable(typeof(SeekRequestDto))]
+[JsonSerializable(typeof(ChallengeRequestDto))]
 [JsonSerializable(typeof(TokenRequestDto))]
 [JsonSerializable(typeof(MoveRequestDto))]
 [JsonSerializable(typeof(DisputeRequestDto))]
@@ -79,6 +104,8 @@ internal sealed partial class PlayApiJsonContext : JsonSerializerContext;
 internal sealed record ClockDto(long InitialMs, long IncrementMs);
 
 internal sealed record SeekRequestDto(string Token, ClockDto Clock);
+
+internal sealed record ChallengeRequestDto(string Token, ClockDto Clock, string? Seat);
 
 internal sealed record TokenRequestDto(string Token);
 
@@ -157,13 +184,57 @@ public sealed class HttpPlayApi(HttpClient http) : IPlayApi
         }
     }
 
+    public async Task<ChallengeOutcome> OpenChallengeAsync(string token, MatchClock clock, Seat? side = null,
+                                                           CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(clock);
+
+        try
+        {
+            HttpResponseMessage response = await _http.PostAsJsonAsync(
+                "play/open",
+                new ChallengeRequestDto(token, new ClockDto(clock.InitialMs, clock.IncrementMs),
+                                        side is null ? null : SeatWire(side.Value)),
+                PlayApiJsonContext.Default.ChallengeRequestDto,
+                cancellationToken);
+
+            SeekResponseDto? dto = await response.Content.ReadFromJsonAsync(
+                PlayApiJsonContext.Default.SeekResponseDto, cancellationToken);
+
+            return dto is null || !dto.Ok || dto.MatchId is null
+                ? ChallengeOutcome.Failed
+                : new ChallengeOutcome(dto.MatchId, ParseSeat(dto.Seat));
+        }
+        catch (Exception exception) when (IsTransport(exception))
+        {
+            return ChallengeOutcome.Failed;
+        }
+    }
+
     /// <summary>
-    /// Announces that this player has arrived. The seat itself was decided by the lobby when it
-    /// paired, so nothing about colour is sent or requested here.
+    /// Announces that this player has arrived — or, for a challenge link, claims the open seat.
+    /// The seat is never asked for: a lobby game had both decided when it paired, and a
+    /// challenge gives away whichever chair its creator left.
     /// </summary>
-    public Task<MatchView?> JoinAsync(string matchId, string token, CancellationToken cancellationToken = default) =>
-        PostAsync(matchId, "join", new TokenRequestDto(token),
-            PlayApiJsonContext.Default.TokenRequestDto, cancellationToken);
+    public async Task<JoinOutcome> JoinAsync(string matchId, string token, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            HttpResponseMessage response = await _http.PostAsJsonAsync(
+                $"play/{matchId}/join", new TokenRequestDto(token),
+                PlayApiJsonContext.Default.TokenRequestDto, cancellationToken);
+
+            MatchEnvelopeDto? dto = await response.Content.ReadFromJsonAsync(
+                PlayApiJsonContext.Default.MatchEnvelopeDto, cancellationToken);
+
+            if (dto is null) return JoinOutcome.Unreachable;
+            return new JoinOutcome(ToView(dto), dto.Ok ? null : dto.Reason ?? "refused");
+        }
+        catch (Exception exception) when (IsTransport(exception))
+        {
+            return JoinOutcome.Unreachable;
+        }
+    }
 
     public async Task<MatchView?> StateAsync(string matchId, string token, CancellationToken cancellationToken = default)
     {
@@ -285,6 +356,8 @@ public sealed class HttpPlayApi(HttpClient http) : IPlayApi
         "disputed" => MatchReason.Disputed,
         _ => MatchReason.None,
     };
+
+    internal static string SeatWire(Seat seat) => seat == Online.Seat.White ? "white" : "black";
 
     internal static string OutcomeWire(MatchOutcome outcome) => outcome switch
     {

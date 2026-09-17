@@ -95,6 +95,7 @@ only `move` needs to grow an arbiter — the client's interface does not move.
 | Route | Who | What |
 |---|---|---|
 | `POST /play/seek` | player | Pair me, or queue me. Safe to repeat; that is how a queued player learns they have a game. |
+| `POST /play/open` | player | Mint a game with one seat left open, for a challenge link. No lobby involved. |
 | `POST /play/cancel` | player | Withdraw a seek. |
 | `POST /play/<id>/join` | player | "I have arrived." The game starts once both have. |
 | `GET /play/<id>/state` | player | The board, the clocks, whose turn. Token in the query string. |
@@ -104,6 +105,29 @@ only `move` needs to grow an arbiter — the client's interface does not move.
 
 `<id>` must match the UUID shape the lobby issues, so a caller cannot name an arbitrary
 Durable Object and make us create it.
+
+### An empty lobby
+
+A new site has nobody in the queue, which is the normal case, not an edge case. Two answers,
+and deliberately not a third:
+
+- **A challenge link** (`POST /play/open`). One seat is left open and belongs to whoever opens
+  the link first; `/join` claims it. This is the one that actually solves the cold start,
+  because the first people to play online on a small site know each other.
+- **Offering the engine.** After 25 seconds of searching the page says it is quiet and offers
+  Moonforge at the same time control. Offered, never substituted.
+
+The third answer — quietly pairing someone with a bot and letting them think it was a person —
+is not implemented and should not be. It buys nothing (Moonforge is one nav item away) and
+costs the site's credibility the first time someone works it out.
+
+### The seek timeout is configurable
+
+`SEEK_TIMEOUT_MS` (default five minutes) drops seeks from tabs that went away. It is a binding
+so the tests can watch it fire; production leaves it unset. Note what it is guarding: a client
+polls `/play/seek` about once a second, and an earlier version re-stamped the waiter as newly
+arrived on every one of those polls, so nothing ever aged out. `since` is now carried over
+unless the time control changes.
 
 ### Seats are the lobby's to decide
 

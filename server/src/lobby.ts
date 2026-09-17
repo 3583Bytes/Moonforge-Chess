@@ -13,8 +13,12 @@ import { readClock } from "./match";
  * id handed out here. This object never learns a move.
  */
 
-/** A seek nobody matched in this long is dropped; the seeker's tab is probably closed. */
-const SEEK_TIMEOUT_MS = 5 * 60_000;
+/**
+ * A seek nobody matched in this long is dropped; the seeker's tab is probably closed.
+ * Overridable so the tests can watch it actually fire — five minutes is not a thing a test
+ * can wait for, and this is exactly the behaviour that was silently broken before.
+ */
+const DEFAULT_SEEK_TIMEOUT_MS = 5 * 60_000;
 
 /** How long a pairing stays readable, so a seeker who was queued can come back and find it. */
 const PAIRING_TTL_MS = 10 * 60_000;
@@ -49,10 +53,14 @@ const EMPTY: LobbyState = { waiting: [], pairings: {} };
 export class LobbyDO implements DurableObject {
   private readonly storage: DurableObjectStorage;
   private readonly matches: DurableObjectNamespace;
+  private readonly seekTimeoutMs: number;
 
-  constructor(ctx: DurableObjectState, env: { MATCH: DurableObjectNamespace }) {
+  constructor(ctx: DurableObjectState, env: { MATCH: DurableObjectNamespace; SEEK_TIMEOUT_MS?: string }) {
     this.storage = ctx.storage;
     this.matches = env.MATCH;
+
+    const configured = Number(env.SEEK_TIMEOUT_MS);
+    this.seekTimeoutMs = Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_SEEK_TIMEOUT_MS;
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -90,8 +98,15 @@ export class LobbyDO implements DurableObject {
 
     const clock = readClock(input.clock);
 
-    // Asking again replaces the earlier request; without this, changing time control would
-    // leave the old seek behind and the player could be paired into a game they left.
+    // A client polls this every second or so to find out whether it has been paired yet, so
+    // "asking again" is the normal case, not a new request. Carrying the original timestamp
+    // over is what makes the queue mean anything: re-stamping it each poll reset every waiter
+    // to "just arrived", which silently broke both the longest-waiter order and the timeout
+    // below — an open tab could never age out, because it was newly arrived a second ago.
+    // A different time control *is* a new request, and starts the clock again.
+    const previous = state.waiting.find((w) => w.token === token);
+    const since = previous !== undefined && sameClock(previous.clock, clock) ? previous.since : now;
+
     state.waiting = state.waiting.filter((w) => w.token !== token);
 
     // Longest wait first, which is the only fair order and the one players notice.
@@ -102,7 +117,7 @@ export class LobbyDO implements DurableObject {
         return json({ ok: false, reason: "lobby_full" }, 503);
       }
 
-      state.waiting.push({ token, clock, since: now });
+      state.waiting.push({ token, clock, since });
       await this.save(state);
       return json({ ok: true, queued: true, waiting: state.waiting.filter((w) => sameClock(w.clock, clock)).length });
     }
@@ -148,7 +163,7 @@ export class LobbyDO implements DurableObject {
    * had every chance to read them.
    */
   private sweep(state: LobbyState, now: number): void {
-    state.waiting = state.waiting.filter((w) => now - w.since < SEEK_TIMEOUT_MS);
+    state.waiting = state.waiting.filter((w) => now - w.since < this.seekTimeoutMs);
 
     for (const [token, pairing] of Object.entries(state.pairings)) {
       if (now - pairing.at >= PAIRING_TTL_MS) delete state.pairings[token];

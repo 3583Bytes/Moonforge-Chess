@@ -72,6 +72,12 @@ interface MatchState {
   /** Which seats have actually opened the page. The game starts when both have. */
   whiteHere: boolean;
   blackHere: boolean;
+  /**
+   * True for a game created from a challenge link, where one seat is deliberately empty and
+   * belongs to whoever opens the link first. False for a lobby pairing, where both seats were
+   * assigned up front and a stranger must not be able to sit down.
+   */
+  openSeat: boolean;
   /** Move list in SAN, as reported by whoever played each one. */
   moves: string[];
   /** Same moves in coordinate form, which is what a client replays. */
@@ -109,6 +115,7 @@ function blank(now: number, clock: MatchClock): MatchState {
     black: null,
     whiteHere: false,
     blackHere: false,
+    openSeat: false,
     moves: [],
     uci: [],
     status: "waiting",
@@ -137,6 +144,8 @@ export class MatchDO implements DurableObject {
     switch (`${request.method} ${pathname}`) {
       case "POST /seat":
         return this.seat(await body(request));
+      case "POST /open":
+        return this.open(await body(request));
       case "POST /join":
         return this.join(await body(request));
       case "GET /state":
@@ -191,6 +200,36 @@ export class MatchDO implements DurableObject {
   }
 
   /**
+   * Opens a game from a challenge link: seats the creator and leaves the other seat for
+   * whoever opens the link first. Unlike {@link seat}, which the lobby calls having already
+   * decided both players, this one is a standing invitation.
+   */
+  private async open(input: { token?: unknown; clock?: unknown; seat?: unknown }): Promise<Response> {
+    const token = readToken(input.token);
+    if (token === null) return json<MoveOutcome>({ ok: false, reason: "malformed" }, 400);
+
+    const now = Date.now();
+    const match = await this.load(now, readClock(input.clock));
+    if (match.white !== null || match.black !== null) {
+      return json<MoveOutcome>({ ok: false, reason: "already_seated" }, 409);
+    }
+
+    // The creator picks a side; anything else means they did not care, so they get White.
+    const creator: Seat = input.seat === "black" ? "black" : "white";
+    if (creator === "white") match.white = token;
+    else match.black = token;
+
+    match.openSeat = true;
+    match.clock = readClock(input.clock);
+    match.whiteMs = match.clock.initialMs;
+    match.blackMs = match.clock.initialMs;
+    match.lastEventAt = now;
+
+    await this.save(match);
+    return json({ ok: true, seat: creator });
+  }
+
+  /**
    * Records that a seated player has arrived. The game starts once both have, so a player who
    * never opens the page does not burn their opponent's clock in the meantime. Calling it again
    * is how a reconnecting player gets back in, and is not an error.
@@ -202,7 +241,20 @@ export class MatchDO implements DurableObject {
     const now = Date.now();
     const match = await this.load(now, UNSTARTED);
 
-    const seat = seatOf(match, token);
+    let seat = seatOf(match, token);
+
+    // A challenge link's empty seat belongs to whoever opens it first. Only then — a lobby
+    // pairing has both seats spoken for, and a stranger with the id must not sit down.
+    if (seat === null && match.openSeat && match.status === "waiting") {
+      if (match.white === null) {
+        match.white = token;
+        seat = "white";
+      } else if (match.black === null) {
+        match.black = token;
+        seat = "black";
+      }
+    }
+
     if (seat === null) return json<MoveOutcome>({ ok: false, reason: "unknown_player" }, 403);
 
     if (seat === "white") match.whiteHere = true;

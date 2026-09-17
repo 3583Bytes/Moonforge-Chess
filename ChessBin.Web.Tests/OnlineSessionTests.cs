@@ -38,8 +38,20 @@ public class OnlineSessionTests
             return Task.CompletedTask;
         }
 
-        public Task<MatchView?> JoinAsync(string matchId, string token, CancellationToken cancellationToken = default) =>
-            Task.FromResult(NextView);
+        /// <summary>Set to make a join fail the way a taken seat does, rather than a dropped request.</summary>
+        public string? RefuseJoinWith;
+        public string? ChallengeId = "99999999-8888-7777-6666-555555555555";
+
+        public Task<ChallengeOutcome> OpenChallengeAsync(string token, MatchClock clock, Seat? side = null,
+                                                         CancellationToken cancellationToken = default) =>
+            Task.FromResult(ChallengeId is null
+                ? ChallengeOutcome.Failed
+                : new ChallengeOutcome(ChallengeId, side ?? Seat.White));
+
+        public Task<JoinOutcome> JoinAsync(string matchId, string token, CancellationToken cancellationToken = default) =>
+            Task.FromResult(RefuseJoinWith is not null
+                ? new JoinOutcome(null, RefuseJoinWith)
+                : new JoinOutcome(NextView, null));
 
         /// <summary>Held open by a test that needs two polls genuinely in flight at once.</summary>
         public TaskCompletionSource? Gate;
@@ -417,6 +429,72 @@ public class OnlineSessionTests
         await Task.WhenAll(first, second);
 
         Assert.That(api.StateCalls, Is.EqualTo(1), "the second poll should have been skipped");
+    }
+
+    [Test]
+    public async Task CreatingAChallengeSeatsYouAndKeepsTheIdForTheLink()
+    {
+        var api = new FakeApi { NextView = View([], Seat.White, opponentJoined: false) };
+        var session = new OnlineSession(api, Token);
+
+        await session.CreateChallengeAsync(MatchClock.Blitz);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(session.ChallengeId, Is.EqualTo(api.ChallengeId));
+            Assert.That(session.Seat, Is.EqualTo(Seat.White));
+            Assert.That(session.Phase, Is.EqualTo(OnlinePhase.Seated));
+            Assert.That(session.Status, Does.Contain("link"), "the player needs telling what to do next");
+        });
+    }
+
+    [Test]
+    public async Task OpeningAnInvitationTakesTheSeatItLeft()
+    {
+        var api = new FakeApi { NextView = View([], Seat.Black) };
+        var session = new OnlineSession(api, Token);
+
+        await session.JoinByLinkAsync(MatchId);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(session.Seat, Is.EqualTo(Seat.Black));
+            Assert.That(session.Phase, Is.EqualTo(OnlinePhase.Playing));
+            Assert.That(session.ChallengeId, Is.Null, "this player did not create the game, so has no link to share");
+        });
+    }
+
+    /// <summary>
+    /// A stale link is a dead end, not a blip. Retrying it forever would leave the visitor
+    /// watching a spinner for a seat that is never coming back.
+    /// </summary>
+    [Test]
+    public async Task AnInvitationWhoseSeatHasGoneSaysSoInsteadOfRetrying()
+    {
+        var api = new FakeApi { RefuseJoinWith = "unknown_player" };
+        var session = new OnlineSession(api, Token);
+
+        await session.JoinByLinkAsync(MatchId);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(session.Phase, Is.EqualTo(OnlinePhase.Idle));
+            Assert.That(session.Status, Does.Contain("not open"));
+            Assert.That(session.MatchId, Is.Null);
+        });
+    }
+
+    [Test]
+    public async Task AQuietLobbyIsNotAdmittedToStraightAway()
+    {
+        var api = new FakeApi { NextSeek = new SeekOutcome(false, true, null, null, 1) };
+        var session = new OnlineSession(api, Token);
+
+        await session.SeekAsync(MatchClock.Blitz);
+
+        // Twenty-five seconds have not passed, so there is nothing to admit yet.
+        Assert.That(session.NobodyAbout, Is.False);
+        Assert.That(session.Status, Does.Contain("Waiting"));
     }
 
     [Test]
