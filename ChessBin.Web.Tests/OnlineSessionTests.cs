@@ -41,8 +41,16 @@ public class OnlineSessionTests
         public Task<MatchView?> JoinAsync(string matchId, string token, CancellationToken cancellationToken = default) =>
             Task.FromResult(NextView);
 
-        public Task<MatchView?> StateAsync(string matchId, string token, CancellationToken cancellationToken = default) =>
-            Task.FromResult(NextView);
+        /// <summary>Held open by a test that needs two polls genuinely in flight at once.</summary>
+        public TaskCompletionSource? Gate;
+        public int StateCalls { get; private set; }
+
+        public async Task<MatchView?> StateAsync(string matchId, string token, CancellationToken cancellationToken = default)
+        {
+            StateCalls++;
+            if (Gate is not null) await Gate.Task;
+            return NextView;
+        }
 
         public Task<MatchView?> MoveAsync(string matchId, string token, string san, string uci,
                                           MatchOutcome? outcome, MatchReason? reason,
@@ -352,6 +360,63 @@ public class OnlineSessionTests
             Assert.That(session.Moves, Has.Count.EqualTo(1));
             Assert.That(session.Disputed, Is.False);
         });
+    }
+
+    /// <summary>
+    /// Pressing "find a game" polls immediately while the page's timer is also polling, so two
+    /// requests go out at once and the older one can come back second. It knows about fewer
+    /// moves than have been played, and applying it would rewind the board.
+    /// </summary>
+    [Test]
+    public async Task ALateReplyFromBeforeTheLastMoveIsIgnored()
+    {
+        (OnlineSession session, FakeApi api) = await PlayingAsync(Seat.Black);
+
+        api.NextView = View(["e2e4", "e7e5", "g1f3"], Seat.Black);
+        await session.PollAsync();
+        Assert.That(session.Moves, Has.Count.EqualTo(3));
+
+        // A reply issued before any of that finally arrives.
+        api.NextView = View(["e2e4"], Seat.Black);
+        await session.PollAsync();
+
+        Assert.That(session.Moves, Has.Count.EqualTo(3), "a stale reply must not rewind the board");
+    }
+
+    /// <summary>
+    /// The same race, one step earlier: a reply issued while the opponent was still arriving
+    /// lands after they have. Believing it puts a live game back to "waiting for your opponent",
+    /// where it sticks, because that state disables the board.
+    /// </summary>
+    [Test]
+    public async Task ALateReplyCannotPutALiveGameBackToWaiting()
+    {
+        (OnlineSession session, FakeApi api) = await PlayingAsync(Seat.White);
+        Assert.That(session.Phase, Is.EqualTo(OnlinePhase.Playing));
+
+        api.NextView = View([], Seat.White, opponentJoined: false);
+        await session.PollAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(session.Phase, Is.EqualTo(OnlinePhase.Playing));
+            Assert.That(session.IsMyTurn, Is.True, "the board must not go dead");
+        });
+    }
+
+    [Test]
+    public async Task TwoPollsAtOnceOnlyProduceOneRequest()
+    {
+        (OnlineSession session, FakeApi api) = await PlayingAsync(Seat.Black);
+        api.Gate = new TaskCompletionSource();
+
+        Task first = session.PollAsync();
+        Task second = session.PollAsync();      // the timer firing while the first is in flight
+
+        api.Gate.SetResult();
+        await Task.WhenAll(first, second);
+
+        Assert.That(api.StateCalls, Is.EqualTo(1), "the second poll should have been skipped");
     }
 
     [Test]

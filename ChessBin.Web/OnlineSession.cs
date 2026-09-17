@@ -56,6 +56,20 @@ public sealed class OnlineSession(IPlayApi api, string playerToken)
     private PendingPromotion? _promotion;
     private DateTimeOffset _syncedAt = DateTimeOffset.UtcNow;
 
+    /// <summary>
+    /// One request at a time. Pressing "find a game" starts a poll of its own while the page's
+    /// timer is also polling, so without this two are in flight at once — and the older reply
+    /// can land second and roll the game backwards.
+    /// </summary>
+    private bool _busy;
+
+    /// <summary>
+    /// Latches once both players have arrived. A reply that was already in flight when they did
+    /// still says they had not, and believing it puts a live game back to "waiting for your
+    /// opponent" — which is exactly where it then sits, because the board is disabled.
+    /// </summary>
+    private bool _opponentSeen;
+
     public event Action? StateChanged;
 
     public OnlinePhase Phase { get; private set; } = OnlinePhase.Idle;
@@ -106,6 +120,9 @@ public sealed class OnlineSession(IPlayApi api, string playerToken)
         await PollAsync();
     }
 
+    /// <summary>True while a request is in flight; the page uses it to skip a timer tick.</summary>
+    public bool Busy => _busy;
+
     public async Task CancelSeekAsync()
     {
         if (Phase != OnlinePhase.Seeking) return;
@@ -123,15 +140,25 @@ public sealed class OnlineSession(IPlayApi api, string playerToken)
     /// </summary>
     public async Task PollAsync()
     {
-        switch (Phase)
+        if (_busy) return;
+
+        _busy = true;
+        try
         {
-            case OnlinePhase.Seeking:
-                await PollLobbyAsync();
-                break;
-            case OnlinePhase.Seated:
-            case OnlinePhase.Playing:
-                await PollMatchAsync();
-                break;
+            switch (Phase)
+            {
+                case OnlinePhase.Seeking:
+                    await PollLobbyAsync();
+                    break;
+                case OnlinePhase.Seated:
+                case OnlinePhase.Playing:
+                    await PollMatchAsync();
+                    break;
+            }
+        }
+        finally
+        {
+            _busy = false;
         }
     }
 
@@ -199,6 +226,11 @@ public sealed class OnlineSession(IPlayApi api, string playerToken)
     /// </summary>
     private async Task AbsorbAsync(MatchView view)
     {
+        // A reply that knows about fewer moves than have already been played is one that was
+        // issued before them and simply arrived late. Applying it would rewind the board.
+        if (view.Uci.Count < _applied) return;
+
+        _opponentSeen |= view.OpponentJoined;
         View = view;
         _syncedAt = DateTimeOffset.UtcNow;
 
@@ -287,7 +319,7 @@ public sealed class OnlineSession(IPlayApi api, string playerToken)
             return;
         }
 
-        if (!view.OpponentJoined)
+        if (!_opponentSeen)
         {
             Phase = OnlinePhase.Seated;
             Status = "Waiting for your opponent to arrive…";
@@ -505,6 +537,7 @@ public sealed class OnlineSession(IPlayApi api, string playerToken)
         _applied = 0;
         _promotion = null;
         Disputed = false;
+        _opponentSeen = false;
         MatchId = null;
         Seat = null;
         View = null;

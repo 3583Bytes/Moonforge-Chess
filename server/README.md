@@ -34,6 +34,12 @@ npm run deploy      # needs `npx wrangler login` first
 npm run tail        # live logs from the deployed Worker
 ```
 
+Pushing a change under `server/` deploys it automatically via `.github/workflows/chessbin-api.yml`,
+which typechecks, tests and then verifies the live Worker. It needs two repository secrets:
+`CLOUDFLARE_API_TOKEN` (Edit Cloudflare Workers template) and `CLOUDFLARE_ACCOUNT_ID`. The manual
+command above stays for one-off deploys. `REFEREE_SECRET` is a *wrangler* secret, set once with
+`wrangler secret put` — deploys do not touch it.
+
 Copy `.dev.vars.example` to `.dev.vars` for local development. It enables loopback origins,
 which production does not allow.
 

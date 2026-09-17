@@ -225,7 +225,6 @@
     private string _timeControl = "Blitz";
     private System.Threading.Timer? _poll;
     private System.Threading.Timer? _tick;
-    private bool _polling;
 
     [Inject] private IPlayApi Play { get; set; } = null!;
     [Inject] private IJSRuntime Js { get; set; } = null!;
@@ -274,20 +273,10 @@
         await InvokeAsync(StateHasChanged);
     }
 
-    /// <summary>Guarded so a slow poll cannot overlap the next one and apply moves twice.</summary>
+    // The session refuses to overlap its own requests, so the timer can fire freely.
     private async Task PollAsync()
     {
-        if (_session is null || _polling) return;
-
-        _polling = true;
-        try
-        {
-            await _session.PollAsync();
-        }
-        finally
-        {
-            _polling = false;
-        }
+        if (_session is not null) await _session.PollAsync();
     }
 
     private async Task SeekAsync()

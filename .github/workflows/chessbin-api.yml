@@ -1,0 +1,70 @@
+# Deploys the Cloudflare Worker behind chessbin.com.
+#
+# This exists because the site and its API deploy by different routes, and only one of them was
+# automatic: pushing a change to ChessBin.Web published it to Pages, while server/ sat waiting
+# for someone to remember `npm run deploy`. Online play shipped to the site and 404'd against a
+# Worker that did not know the routes yet. Now they move together.
+name: ChessBin API
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - "server/**"
+      - ".github/workflows/chessbin-api.yml"
+
+permissions:
+  contents: read
+
+# Never two deploys at once, and no point finishing an older one.
+concurrency:
+  group: chessbin-api
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: server
+        run: npm run typecheck
+
+      # Runs inside workerd, the same runtime that serves production, so a route that passes
+      # here is a route that works when deployed. Deliberately before the deploy, not after.
+      - name: Test
+        working-directory: server
+        run: npm test
+
+      - name: Deploy
+        working-directory: server
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN is not set — add it under Settings → Secrets → Actions."
+            exit 1
+          fi
+          npx wrangler deploy
+
+      # Checks the deployed Worker against the rules it is supposed to enforce — most usefully,
+      # that the local-development allowance for localhost origins did not follow it into
+      # production.
+      - name: Verify the deployment
+        working-directory: server
+        run: npm run verify -- https://chessbin-api.3583bytes.workers.dev
