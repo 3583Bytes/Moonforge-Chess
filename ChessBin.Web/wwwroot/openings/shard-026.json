@@ -49,7 +49,7 @@
 {"k":"r3kbnr/1ppb1ppp/p1p5/8/3NP3/8/PPP2PPP/RNB1K2R w KQkq -","n":"Ruy Lopez: Exchange, Alekhine Variation","e":"C68","m":[]},
 {"k":"r4rk1/2q1bppp/p2p1n2/npp1p3/3PP3/2P1Nb2/PPB2PPP/R1BQR1K1 w - -","m":[{"s":"Qxf3","u":"d1f3","w":0,"n":"Ruy Lopez: Closed, Alekhine Gambit","e":"C88"}]},
 {"k":"rn1qk2r/4ppbp/b2p1np1/2pP4/8/2N2NP1/PP2PPBP/R1BQK2R b KQkq -","n":"Benko Gambit Accepted: Fianchetto Variation","e":"A58","m":[]},
-{"k":"rn1qk2r/pbppbppp/1p2pn2/8/2PP4/5NP1/PP1BPPBP/RN1QK2R w KQkq -","n":"Queen's Indian Defense: Riumin Variation","e":"E16","m":[]},
+{"k":"rn1qk2r/pbppbppp/1p2pn2/8/2PP4/5NP1/PP1BPPBP/RN1QK2R w KQkq -","n":"Queen's Indian Defense: Riumin Variation","e":"E16","m":[{"s":"O-O","u":"e1g1","w":0}]},
 {"k":"rn1qk2r/pp3ppp/2p1pn2/5b2/PbBP4/2N1PN2/1P3PPP/R1BQK2R w KQkq -","m":[{"s":"O-O","u":"e1g1","w":17,"n":"Slav Defense: Czech Variation, Dutch Variation","e":"D19"}]},
 {"k":"rn1qkb1r/1b1p1ppp/p3pn2/1pp5/3PP3/2PB1N2/PP3PPP/RNBQ1RK1 w kq -","n":"French Defense: St. George Defense, Traditional Line","e":"C00","m":[]},
 {"k":"rn1qkb1r/pbpppppp/1p3n2/8/3P4/5NP1/PPP1PP1P/RNBQKB1R w KQkq -","m":[{"s":"Bg2","u":"f1g2","w":0}]},

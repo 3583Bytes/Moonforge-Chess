@@ -42,6 +42,7 @@
 {"k":"r3kb1r/ppp2ppp/2n1b3/3q2B1/3pN3/5N2/PPP2PPP/R2QR1K1 b kq -","n":"Italian Game: Scotch Gambit, Anderssen Attack, Main Line","e":"C56","m":[]},
 {"k":"rn1q1rk1/pb1pbppp/1p2pn2/2p5/2PP4/1P1BPN2/PB3PPP/RN1Q1RK1 b - -","m":[{"s":"cxd4","u":"c5d4","w":0}]},
 {"k":"rn1q1rk1/pb1pbppp/1p2pn2/8/N1Pp4/P2BPN2/1P3PPP/R1BQ1RK1 w - -","n":"Nimzo-Indian Defense: St. Petersburg Variation","e":"E43","m":[]},
+{"k":"rn1q1rk1/pbp1bppp/1p2pn2/3p4/2PP4/2N2NP1/PP1BPPBP/R2Q1RK1 w - d6","n":"Queen's Indian Defense: Riumin Variation","e":"E16","m":[]},
 {"k":"rn1qkb1r/pb1p1ppp/1p2pn2/2p5/2P5/2N2NP1/PP1PPPBP/R1BQK2R w KQkq -","m":[{"s":"O-O","u":"e1g1","w":20}]},
 {"k":"rn1qkb1r/pbpp1pp1/1p2pn1p/6B1/2PP4/2N2N2/PP2PPPP/R2QKB1R w KQkq -","m":[{"s":"Bh4","u":"g5h4","w":0}]},
 {"k":"rn1qkb1r/pp2pppp/2p2n2/3p4/2PP2b1/4PN2/PP3PPP/RNBQKB1R w KQkq -","n":"Slav Defense: Quiet Variation, Pin Defense","e":"D11","m":[]},

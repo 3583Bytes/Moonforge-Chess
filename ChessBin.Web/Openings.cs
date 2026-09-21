@@ -29,6 +29,28 @@ public sealed record OpeningPosition(
     public static readonly OpeningPosition Empty = new("", null, null, []);
 }
 
+/// <summary>
+/// A named opening as the tables give it — the move order it is actually known by, which the
+/// position graph cannot supply: transpositions merge move orders there, so the shortest path
+/// to a named position is frequently not its line.
+/// </summary>
+/// <param name="Slug">The URL segment its page lives at, e.g. "sicilian-defense-najdorf-variation".</param>
+/// <param name="Sans">The moves in notation, for reading.</param>
+/// <param name="Ucis">The same moves in coordinate form, for replaying onto a board.</param>
+public sealed record OpeningLine(
+    [property: JsonPropertyName("g")] string Slug,
+    [property: JsonPropertyName("n")] string Name,
+    [property: JsonPropertyName("e")] string Eco,
+    [property: JsonPropertyName("p")] IReadOnlyList<string> Sans,
+    [property: JsonPropertyName("u")] IReadOnlyList<string> Ucis,
+    [property: JsonPropertyName("k")] string Key);
+
+/// <summary>What the line index's manifest says about the shipped set.</summary>
+public sealed record OpeningLineManifest(
+    [property: JsonPropertyName("version")] int Version,
+    [property: JsonPropertyName("lines")] int Lines,
+    [property: JsonPropertyName("shards")] int Shards);
+
 /// <summary>What the manifest says about the shipped set.</summary>
 public sealed record OpeningManifest(
     [property: JsonPropertyName("version")] int Version,
@@ -49,7 +71,9 @@ public sealed record OpeningManifest(
 public sealed class OpeningExplorer(HttpClient http)
 {
     private readonly Dictionary<int, Dictionary<string, OpeningPosition>> _shards = [];
+    private readonly Dictionary<int, Dictionary<string, OpeningLine>> _lineShards = [];
     private OpeningManifest? _manifest;
+    private OpeningLineManifest? _lineManifest;
 
     /// <summary>Null until the first lookup has loaded it.</summary>
     public OpeningManifest? Manifest => _manifest;
@@ -84,6 +108,71 @@ public sealed class OpeningExplorer(HttpClient http)
             hash *= 16777619;
         }
         return (int)(hash % (uint)shards);
+    }
+
+    /// <summary>
+    /// The URL segment an opening's page lives at. Deliberately duplicated from
+    /// <c>tools/OpeningPages</c> for the same reason <see cref="ShardOf"/> is, and
+    /// <c>OpeningPageTests</c> asserts the two agree on every name that shipped.
+    /// <para>
+    /// Accents are folded by an explicit table: only eight accented letters occur in the
+    /// tables, two of them do not decompose under NFD, and the site is built with
+    /// <c>InvariantGlobalization</c>, where normalisation is not something to rely on.
+    /// </para>
+    /// </summary>
+    public static string SlugOf(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+
+        var sb = new System.Text.StringBuilder(name.Length);
+        bool separatorPending = false;
+
+        foreach (char raw in name)
+        {
+            char lower = char.ToLowerInvariant(raw);
+            char c = lower switch
+            {
+                'á' => 'a', 'ä' => 'a', 'é' => 'e', 'ó' => 'o',
+                'ö' => 'o', 'ø' => 'o', 'ü' => 'u', 'ć' => 'c',
+                _ => lower,
+            };
+
+            if (c is >= 'a' and <= 'z' or >= '0' and <= '9')
+            {
+                if (separatorPending && sb.Length > 0) sb.Append('-');
+                separatorPending = false;
+                sb.Append(c);
+            }
+            else if (c != '\'')
+            {
+                separatorPending = true;
+            }
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Looks up a named line by the slug in its URL, so a link straight to an opening's page
+    /// opens the explorer on that line rather than at the first move. Null when the slug names
+    /// nothing, which the caller should treat as "start from the beginning" rather than as an
+    /// error — a stale link is not worth an error page.
+    /// </summary>
+    public async Task<OpeningLine?> LineAsync(string slug)
+    {
+        ArgumentNullException.ThrowIfNull(slug);
+
+        OpeningLineManifest manifest =
+            _lineManifest ??= await http.GetFromJsonOrThrowAsync<OpeningLineManifest>("openings/lines/manifest.json");
+
+        int index = ShardOf(slug, manifest.Shards);
+        if (!_lineShards.TryGetValue(index, out Dictionary<string, OpeningLine>? shard))
+        {
+            var lines = await http.GetFromJsonOrThrowAsync<List<OpeningLine>>($"openings/lines/shard-{index:D2}.json");
+            shard = _lineShards[index] = lines.ToDictionary(l => l.Slug, StringComparer.Ordinal);
+        }
+
+        return shard.GetValueOrDefault(slug);
     }
 
     /// <summary>

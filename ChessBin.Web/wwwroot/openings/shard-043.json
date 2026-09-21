@@ -48,6 +48,7 @@
 {"k":"r2qkb1r/pb1n1ppp/4p3/3nP3/Np1N4/3B4/PP3PPP/R1BQ1RK1 b kq -","n":"Semi-Slav Defense: Meran Variation, Wade Variation, Kaidanov Gambit","e":"D47","m":[]},
 {"k":"r3r1k1/2qbbppp/p2p1n2/npp1p3/3PP3/2P2N1P/PPB2PP1/R1BQRNK1 w - -","m":[{"s":"Ne3","u":"f1e3","w":0}]},
 {"k":"r4rk1/pp1bqpp1/2n1pn1p/2p5/2BP4/2N1PN2/PPQ2PPP/R2R2K1 w - -","n":"Queen's Gambit Declined: Lasker Defense, Russian Variation","e":"D56","m":[]},
+{"k":"rn1q1rk1/1bpp1ppp/1p2pn2/p7/1bPP4/5NP1/PP1NPPBP/R1BQ1RK1 w - a6","n":"Queen's Indian Defense: Capablanca Variation","e":"E16","m":[]},
 {"k":"rn1q1rk1/pbppbppp/1p3n2/3p4/2P4N/6P1/PP2PPBP/RNBQ1RK1 b - -","n":"Queen's Indian Defense: Classical Variation, Polugaevsky Gambit","e":"E17","m":[]},
 {"k":"rn1q1rk1/pp3ppp/2p1p3/5b2/PbBPn3/2N1PN2/1P2QPPP/R1B2RK1 w - -","m":[{"s":"g4","u":"g2g4","w":0,"n":"Slav Defense: Czech Variation, Dutch Variation, Sämisch Variation","e":"D19"}]},
 {"k":"rn1qk2r/ppp2ppp/5pb1/8/1b1Pp1P1/2N5/PPP1QP1P/R3KBNR w KQkq -","m":[{"s":"Qb5+","u":"e2b5","w":0,"n":"Blackmar-Diemer Gambit: von Popiel Gambit, Zilbermints Variation","e":"D00"}]},

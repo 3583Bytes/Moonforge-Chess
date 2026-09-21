@@ -20,7 +20,15 @@ const precacheInclude = [/\.wasm$/, /\.js$/, /\.css$/, /\.html$/, /\.json$/, /\.
 // far too much to force on every install. Shards are cached on demand instead (see onFetch).
 // The community game's state changes on a schedule, so precaching it would show a stale
 // board to anyone who had installed the app. Fetched from the network every time instead.
+//
+// The per-opening pages are excluded for a sharper reason than size. There are hundreds of
+// them, addAll is atomic, and one failed request or mismatched hash out of hundreds rejects
+// the whole install — which would leave every visitor with no offline mode at all. They are
+// pre-rendered for crawlers and link previews, and a visitor who opens one gets the app shell
+// from cache and the same line rendered by the router, so nothing is lost by leaving them out.
+// openings/index.html is the explorer's own page and stays in the shell.
 const precacheExclude = [/^service-worker\.js$/, /^puzzles\/shard-/, /^openings\/shard-/,
+                         /^openings\/lines\//, /^openings\/[^/]+\/index\.html$/,
                          /^vote\/state\.json$/];
 
 async function onInstall() {

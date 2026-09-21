@@ -65,7 +65,7 @@
 {"k":"rn1q1rk1/pbpp1ppp/1p2pn2/8/2PP4/2PBPN2/P4PPP/R1BQ1RK1 b - -","n":"Nimzo-Indian Defense: St. Petersburg Variation","e":"E43","m":[]},
 {"k":"rn1qk2r/pb1pbppp/1p2pn2/2p5/2P5/2N2NP1/PP1PPPBP/R1BQ1RK1 w kq -","n":"English Opening: Symmetrical Variation, Hedgehog Defense","e":"A30","m":[{"s":"d4","u":"d2d4","w":0}]},
 {"k":"rn1qk2r/pb2bppp/1p1ppn2/8/2PQ4/2N2NP1/PP2PPBP/R1B2RK1 w kq -","m":[{"s":"Rd1","u":"f1d1","w":0}]},
-{"k":"rn1qk2r/pbpp1ppp/1p2pn2/8/1bPP4/5NP1/PP2PPBP/RNBQK2R w KQkq -","n":"Queen's Indian Defense: Capablanca Variation","e":"E16","m":[{"s":"Bd2","u":"c1d2","w":0}]},
+{"k":"rn1qk2r/pbpp1ppp/1p2pn2/8/1bPP4/5NP1/PP2PPBP/RNBQK2R w KQkq -","n":"Queen's Indian Defense: Capablanca Variation","e":"E16","m":[{"s":"Bd2","u":"c1d2","w":0},{"s":"Nbd2","u":"b1d2","w":0}]},
 {"k":"rn1qkb1r/1p3ppp/p2pbn2/4p3/4P3/1NN1B3/PPP2PPP/R2QKB1R w KQkq -","m":[{"s":"f3","u":"f2f3","w":52,"n":"Sicilian Defense: Najdorf Variation, English Attack","e":"B90"},{"s":"h3","u":"h2h3","w":0,"n":"Sicilian Defense: Najdorf Variation, English Attack","e":"B90"}]},
 {"k":"rn1qkb1r/4pp1p/3p1np1/2pP4/4P3/2N2N2/PP3PPP/R1BQKb1R w KQkq -","m":[{"s":"Kxf1","u":"e1f1","w":0}]},
 {"k":"rn1qkb1r/p1pp1ppp/bp2pn2/8/2PP4/5NP1/PP2PP1P/RNBQKB1R w KQkq -","n":"Queen's Indian Defense: Fianchetto Variation, Nimzowitsch Variation","e":"E15","m":[{"s":"b3","u":"b2b3","w":196,"n":"Queen's Indian Defense: Fianchetto Variation, Nimzowitsch Variation, Quiet Line","e":"E15"},{"s":"Qa4","u":"d1a4","w":10,"n":"Queen's Indian Defense: Fianchetto Variation, Nimzowitsch Variation, Nimzowitsch Attack","e":"E15"},{"s":"Qb3","u":"d1b3","w":0,"n":"Queen's Indian Defense: Fianchetto Variation, Nimzowitsch Variation, Timman's Line","e":"E15"}]},

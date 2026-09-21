@@ -36,6 +36,14 @@ internal static class Program
         var stats = new Stats();
         var positions = new Dictionary<string, Position>(StringComparer.Ordinal);
 
+        // One entry per distinct opening name, holding the move order the table gives it.
+        // The position graph cannot supply this after the fact: transpositions merge move
+        // orders, so the shortest path to a named position is often not the line the opening
+        // is known by — walking the graph reaches "Queen's Gambit Declined" via 1.d4 Nf6,
+        // and 1,302 named positions have more than one shortest path. The table's own move
+        // order is the only canonical one, so it is captured here rather than rediscovered.
+        var lines = new Dictionary<string, Line>(StringComparer.Ordinal);
+
         // One Engine for the whole run: its constructor loads the opening book, and paying
         // that per line would dominate everything else.
         var engine = new Engine();
@@ -44,13 +52,14 @@ internal static class Program
         {
             foreach (var line in ReadTable(Path.Combine(opt.TsvDir, $"{table}.tsv"), stats))
             {
-                Ingest(engine, line, positions, stats);
+                Ingest(engine, line, positions, lines, stats);
             }
         }
 
         Console.WriteLine($"read      {stats.Rows:n0} named openings ({stats.RejectedRow:n0} malformed rows)");
         Console.WriteLine($"replayed  {stats.Accepted:n0} lines ({stats.RejectedEngine:n0} rejected by the engine)");
         Console.WriteLine($"positions {positions.Count:n0} unique, {positions.Values.Sum(p => p.Moves.Count):n0} moves");
+        Console.WriteLine($"lines     {lines.Count:n0} distinct names, each with the move order its table row gives");
 
         int weighted = ApplyBookWeights(opt.BookPath, positions);
         Console.WriteLine($"weights   {weighted:n0} moves carry a popularity count from the engine book");
@@ -61,7 +70,7 @@ internal static class Program
             return 1;
         }
 
-        Write(positions, opt, stats);
+        Write(positions, lines, opt, stats);
         return 0;
     }
 
@@ -113,7 +122,12 @@ internal static class Program
     /// it. The line's final position carries the name — that is what makes the explorer
     /// able to say "you are in the Najdorf" rather than just listing moves.
     /// </summary>
-    private static void Ingest(Engine engine, Row row, Dictionary<string, Position> positions, Stats stats)
+    private static void Ingest(
+        Engine engine,
+        Row row,
+        Dictionary<string, Position> positions,
+        Dictionary<string, Line> lines,
+        Stats stats)
     {
         var sans = SanMoves(row.Pgn);
         if (sans.Count == 0) { stats.RejectedEngine++; return; }
@@ -123,6 +137,7 @@ internal static class Program
             engine.SetPosition(StartFen);
 
             string key = Key(engine.FEN);
+            var ucis = new List<string>(sans.Count);
             foreach (string san in sans)
             {
                 string from = engine.FEN;
@@ -130,6 +145,7 @@ internal static class Program
 
                 string uci = UciOf(from, engine.FEN, engine);
                 if (uci.Length == 0) { stats.RejectedEngine++; return; }
+                ucis.Add(uci);
 
                 Position node = positions.TryGetValue(key, out var existing)
                     ? existing
@@ -147,6 +163,12 @@ internal static class Program
             Position terminal = positions.TryGetValue(key, out var t) ? t : positions[key] = new Position(key);
             terminal.Name ??= row.Name;
             terminal.Eco ??= row.Eco;
+
+            // First row wins per name, the same rule as the terminal name above, so a page's
+            // line is the one the table lists first. Rows are read in ECO order a→e, so the
+            // choice is stable across runs.
+            if (!lines.ContainsKey(row.Name))
+                lines[row.Name] = new Line(Slug(row.Name), row.Name, row.Eco, sans, ucis, key);
 
             stats.Accepted++;
         }
@@ -252,7 +274,49 @@ internal static class Program
         return (int)(hash % (uint)shards);
     }
 
-    private static void Write(Dictionary<string, Position> positions, Options opt, Stats stats)
+    /// <summary>
+    /// The URL segment an opening's page lives at: "Queen's Pawn Game: Zukertort Variation"
+    /// becomes "queens-pawn-game-zukertort-variation".
+    /// <para>
+    /// Accents are folded by an explicit table rather than Unicode normalisation. Exactly
+    /// eight accented letters occur in the tables — á ä é ó ö ø ü ć — and two of them, ø and
+    /// ć, do not decompose under NFD at all, so normalisation would both miss those and drag
+    /// in a dependency on ICU for a job a lookup does identically on every platform.
+    /// </para>
+    /// Apostrophes are dropped rather than turned into a separator, so "King's Indian" reads
+    /// "kings-indian" and not "king-s-indian".
+    /// </summary>
+    internal static string Slug(string name)
+    {
+        var sb = new StringBuilder(name.Length);
+        bool separatorPending = false;
+
+        foreach (char raw in name)
+        {
+            char lower = char.ToLowerInvariant(raw);
+            char c = lower switch
+            {
+                'á' => 'a', 'ä' => 'a', 'é' => 'e', 'ó' => 'o',
+                'ö' => 'o', 'ø' => 'o', 'ü' => 'u', 'ć' => 'c',
+                _ => lower,
+            };
+
+            if (c is >= 'a' and <= 'z' or >= '0' and <= '9')
+            {
+                if (separatorPending && sb.Length > 0) sb.Append('-');
+                separatorPending = false;
+                sb.Append(c);
+            }
+            else if (c != '\'')
+            {
+                separatorPending = true;
+            }
+        }
+
+        return sb.ToString();
+    }
+
+    private static void Write(Dictionary<string, Position> positions, Dictionary<string, Line> lines, Options opt, Stats stats)
     {
         Directory.CreateDirectory(opt.OutDir);
         foreach (string stale in Directory.EnumerateFiles(opt.OutDir, "shard-*.json")) File.Delete(stale);
@@ -309,11 +373,82 @@ internal static class Program
         long bytes = Directory.EnumerateFiles(opt.OutDir, "*.json").Sum(f => new FileInfo(f).Length);
         int biggest = buckets.Max(b => b.Count);
         Console.WriteLine($"wrote     {opt.Shards} shards + manifest to {opt.OutDir} ({bytes / 1024.0:n1} KB total, largest shard {biggest} positions)");
+
+        WriteLines(lines, opt);
+    }
+
+    /// <summary>
+    /// The name index, sharded the same way the positions are so a deep link fetches one
+    /// small file instead of a 400 KB table. Sharded by slug rather than by position key,
+    /// because a slug is all a URL carries.
+    /// </summary>
+    private static void WriteLines(Dictionary<string, Line> lines, Options opt)
+    {
+        string dir = Path.Combine(opt.OutDir, "lines");
+        Directory.CreateDirectory(dir);
+        foreach (string stale in Directory.EnumerateFiles(dir, "shard-*.json")) File.Delete(stale);
+
+        var buckets = new List<Line>[opt.LineShards];
+        for (int i = 0; i < buckets.Length; i++) buckets[i] = [];
+        foreach (Line line in lines.Values) buckets[Shard(line.Slug, opt.LineShards)].Add(line);
+
+        for (int s = 0; s < buckets.Length; s++)
+        {
+            buckets[s].Sort((a, b) => string.CompareOrdinal(a.Slug, b.Slug));
+
+            var sb = new StringBuilder("[\n");
+            for (int i = 0; i < buckets[s].Count; i++)
+            {
+                sb.Append(buckets[s][i].ToJson());
+                sb.Append(i == buckets[s].Count - 1 ? "\n" : ",\n");   // one line per line = readable diffs
+            }
+            sb.Append("]\n");
+            File.WriteAllText(Path.Combine(dir, $"shard-{s:D2}.json"), sb.ToString());
+        }
+
+        var manifest = new StringBuilder();
+        manifest.Append("{\n");
+        manifest.Append("  \"version\": 1,\n");
+        manifest.Append($"  \"lines\": {lines.Count},\n");
+        manifest.Append($"  \"shards\": {opt.LineShards},\n");
+        manifest.Append("  \"shardBy\": \"FNV-1a 32-bit over the slug, modulo shards\",\n");
+        manifest.Append("  \"slug\": \"the name lowercased, accents folded, apostrophes dropped, every other run of characters collapsed to one dash\",\n");
+        manifest.Append("  \"line\": \"p is the move order in notation, u the same moves in coordinates, k the position it ends on\",\n");
+        manifest.Append("  \"source\": \"lichess-org/chess-openings\",\n");
+        manifest.Append("  \"license\": \"CC0-1.0\"\n");
+        manifest.Append("}\n");
+        File.WriteAllText(Path.Combine(dir, "manifest.json"), manifest.ToString());
+
+        long bytes = Directory.EnumerateFiles(dir, "*.json").Sum(f => new FileInfo(f).Length);
+        Console.WriteLine($"wrote     {opt.LineShards} line shards + manifest to {dir} ({bytes / 1024.0:n1} KB total)");
     }
 
     // ── Types ───────────────────────────────────────────────────────────────────
 
     private sealed record Row(string Eco, string Name, string Pgn);
+
+    /// <summary>
+    /// A named opening as the table gives it: the slug its page lives at, the move order in
+    /// both notations, and the position the line ends on. The coordinate form is what the
+    /// explorer replays to open on that line; the notation is what a page prints.
+    /// </summary>
+    private sealed record Line(
+        string Slug,
+        string Name,
+        string Eco,
+        List<string> Sans,
+        List<string> Ucis,
+        string Key)
+    {
+        public string ToJson()
+        {
+            static string Quote(IEnumerable<string> values) =>
+                string.Join(",", values.Select(v => $"\"{Esc(v)}\""));
+
+            return $"{{\"g\":\"{Esc(Slug)}\",\"n\":\"{Esc(Name)}\",\"e\":\"{Esc(Eco)}\"," +
+                   $"\"p\":[{Quote(Sans)}],\"u\":[{Quote(Ucis)}],\"k\":\"{Esc(Key)}\"}}";
+        }
+    }
 
     private sealed class Move(string san, string uci, string childKey)
     {
@@ -364,10 +499,10 @@ internal static class Program
             if (Name is not null) line.Append($",\"n\":\"{Esc(Name)}\",\"e\":\"{Esc(Eco!)}\"");
             return line.Append($",\"m\":[{string.Join(",", ordered)}]}}").ToString();
         }
-
-        /// <summary>Opening names carry quotes and the odd backslash; FENs carry neither, but escape both anyway.</summary>
-        private static string Esc(string value) => value.Replace("\\", "\\\\").Replace("\"", "\\\"");
     }
+
+    /// <summary>Opening names carry quotes and the odd backslash; FENs carry neither, but escape both anyway.</summary>
+    private static string Esc(string value) => value.Replace("\\", "\\\\").Replace("\"", "\\\"");
 
     private sealed class Stats
     {
@@ -380,6 +515,7 @@ internal static class Program
         public string OutDir = "";
         public string BookPath = Path.Combine("ChessCoreEngine", "Book.cs");
         public int Shards = 64;
+        public int LineShards = 64;
 
         public static Options? Parse(string[] args)
         {
@@ -394,6 +530,7 @@ internal static class Program
                     case "--out": o.OutDir = Next(); break;
                     case "--book": o.BookPath = Next(); break;
                     case "--shards": o.Shards = int.Parse(Next()); break;
+                    case "--line-shards": o.LineShards = int.Parse(Next()); break;
                     default:
                         Console.Error.WriteLine($"unknown argument: {a}");
                         return null;
@@ -403,7 +540,7 @@ internal static class Program
             if (o.TsvDir.Length == 0 || o.OutDir.Length == 0)
             {
                 Console.Error.WriteLine("usage: OpeningImport --tsv <dir with a.tsv..e.tsv> --out <dir>");
-                Console.Error.WriteLine("       [--book ChessCoreEngine/Book.cs] [--shards 64]");
+                Console.Error.WriteLine("       [--book ChessCoreEngine/Book.cs] [--shards 64] [--line-shards 64]");
                 return null;
             }
             return o;

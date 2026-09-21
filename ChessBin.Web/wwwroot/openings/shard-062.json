@@ -48,6 +48,7 @@
 {"k":"r2qkb1r/ppp1pppp/1nn5/4Pb2/2PP4/4B3/PP4PP/RN1QKBNR w KQkq -","m":[{"s":"Nc3","u":"b1c3","w":0}]},
 {"k":"r2qkbnr/1ppb1p1p/p1np2p1/4p3/B2PP3/2P2N2/PP3PPP/RNBQK2R w KQkq -","n":"Ruy Lopez: Morphy Defense, Modern Steinitz Defense, Fianchetto Variation","e":"C76","m":[]},
 {"k":"r3kb1r/pppq1ppp/1nn1p3/4Pb2/2PP4/2N1BN2/PP4PP/R2QKB1R w KQkq -","m":[{"s":"Be2","u":"f1e2","w":0}]},
+{"k":"rn1q1rk1/pbppbppp/1p2pn2/8/2PP4/2N2NP1/PP1BPPBP/R2Q1RK1 b - -","n":"Queen's Indian Defense: Riumin Variation","e":"E16","m":[{"s":"d5","u":"d7d5","w":0,"n":"Queen's Indian Defense: Riumin Variation","e":"E16"}]},
 {"k":"rn1qk2r/pbpp2pp/1p2p3/5p2/1bPPn3/2NBPN2/PPQ2PPP/R1B1K2R w KQkq -","n":"Nimzo-Indian Defense: St. Petersburg Variation","e":"E43","m":[]},
 {"k":"rn1qk2r/ppp1bppp/1n2p3/4Pb2/2PP4/2N2N2/PP4PP/R1BQKB1R w KQkq -","m":[{"s":"Be2","u":"f1e2","w":0}]},
 {"k":"rn1qkb1r/pp2pppp/2p2n2/3p4/2P3b1/1P3N2/PB1PPPPP/RN1QKB1R w KQkq -","n":"Réti Opening: Anglo-Slav Variation, Capablanca Variation","e":"A12","m":[{"s":"d3","u":"d2d3","w":0,"n":"Réti Opening: Anglo-Slav Variation, Capablanca Variation","e":"A12"},{"s":"e3","u":"e2e3","w":0,"n":"Réti Opening: Anglo-Slav Variation, Capablanca Variation","e":"A12"}]},

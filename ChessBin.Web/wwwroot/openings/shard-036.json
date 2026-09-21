@@ -45,6 +45,7 @@
 {"k":"r2qkb1r/pb1n1ppp/2p1pn2/8/1p1PP3/2NB1N2/PP3PPP/R1BQK2R w KQkq -","m":[{"s":"Na4","u":"c3a4","w":0}]},
 {"k":"r2qkb1r/pp1n1ppp/2p2n2/3p4/3P2b1/5NP1/PP2PPBP/RNBQ1RK1 w kq -","m":[{"s":"Nc3","u":"b1c3","w":0}]},
 {"k":"r3kb1r/ppq2ppp/2p2n2/4nb2/P1N5/2N3P1/1P2PP1P/R1BQKB1R w KQkq -","m":[{"s":"Bf4","u":"c1f4","w":0}]},
+{"k":"rn1q1rk1/pbpp1ppp/1p2pn2/8/1bPP4/5NP1/PP1NPPBP/R1BQK2R w KQ -","m":[{"s":"O-O","u":"e1g1","w":0,"n":"Queen's Indian Defense: Capablanca Variation","e":"E16"}]},
 {"k":"rn1qk2r/pbppbppp/1p2pn2/8/2PP4/5NP1/PP2PPBP/RNBQK2R w KQkq -","n":"Queen's Indian Defense: Traditional Variation","e":"E17","m":[{"s":"Nc3","u":"b1c3","w":35,"n":"Queen's Indian Defense: Anti-Queen's Indian System","e":"E17"},{"s":"O-O","u":"e1g1","w":5,"n":"Queen's Indian Defense: Classical Variation","e":"E17"}]},
 {"k":"rn1qkb1r/1b3ppp/p3pn2/1pp5/3P4/1B2PN2/PP2QPPP/RNB2RK1 w kq -","n":"Queen's Gambit Accepted: Classical Defense, Alekhine System, Main Line","e":"D29","m":[{"s":"Nc3","u":"b1c3","w":0,"n":"Queen's Gambit Accepted: Classical Defense, Alekhine System, Main Line","e":"D29"},{"s":"Rd1","u":"f1d1","w":0}]},
 {"k":"rn1qkb1r/pp3ppp/2p1pn2/3p1b2/8/3P1NP1/PPP1PPBP/RNBQ1RK1 w kq -","m":[{"s":"Nbd2","u":"b1d2","w":0,"n":"King's Indian Attack, with Bf5","e":"A07"},{"s":"Nh4","u":"f3h4","w":0,"n":"King's Indian Attack, with Bf5","e":"A07"}]},

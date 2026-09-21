@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "lines": 3174,
+  "shards": 64,
+  "shardBy": "FNV-1a 32-bit over the slug, modulo shards",
+  "slug": "the name lowercased, accents folded, apostrophes dropped, every other run of characters collapsed to one dash",
+  "line": "p is the move order in notation, u the same moves in coordinates, k the position it ends on",
+  "source": "lichess-org/chess-openings",
+  "license": "CC0-1.0"
+}

@@ -66,6 +66,14 @@ public sealed class RoutingTests
             Assert.That(templates, Does.Contain("puzzle"), "the nav links to /puzzle");
             Assert.That(templates, Does.Contain("puzzle/practice"), "the daily puzzle links to /puzzle/practice");
             Assert.That(templates, Does.Contain("openings"), "the nav links to /openings");
+            // Every pre-rendered opening page is served at its own URL, and the app boots over
+            // it. Without this route the router would answer with the not-found page a moment
+            // after the page had already rendered correctly — which looks like a broken link
+            // to a visitor and undoes the reason those pages exist.
+            // Contains through the set, not Does.Contain, so the assertion does not depend on
+            // how the route parameter happens to be capitalised.
+            Assert.That(templates.Contains("openings/{slug}"), Is.True,
+                "the generated opening pages live at /openings/<slug>");
             Assert.That(templates, Does.Contain("play-online"), "the nav links to /play-online");
             Assert.That(templates, Does.Contain("review"), "the nav links to /review");
             Assert.That(templates, Does.Contain("vote"), "the nav links to /vote");

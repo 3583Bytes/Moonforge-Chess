@@ -42,6 +42,7 @@
 {"k":"r2qkb1r/pp1npppp/2p2n2/4Nb2/P1pP4/2N5/1P2PPPP/R1BQKB1R w KQkq -","m":[{"s":"Nxc4","u":"e5c4","w":11}]},
 {"k":"r2qkb1r/pp2pppp/n1p2n2/5b2/P1pP4/2N1PN2/1P3PPP/R1BQKB1R w KQkq -","n":"Slav Defense: Czech Variation, Lasker Variation","e":"D18","m":[]},
 {"k":"r3kbnr/pp1b1ppp/1qn1p3/3pP3/3p4/2PB1N2/PP3PPP/RNBQ1RK1 w kq -","m":[{"s":"Re1","u":"f1e1","w":0,"n":"French Defense: Advance Variation, Milner-Barry Gambit, Hector Variation","e":"C02"}]},
+{"k":"rn1q1rk1/pbppbppp/1p2pn2/8/2PP4/5NP1/PP1BPPBP/RN1Q1RK1 w - -","m":[{"s":"Nc3","u":"b1c3","w":0,"n":"Queen's Indian Defense: Riumin Variation","e":"E16"}]},
 {"k":"rn1qk2r/pb1pbppp/1p2pn2/8/2Pp4/2N2NP1/PP2PPBP/R1BQ1RK1 w kq -","m":[{"s":"Qxd4","u":"d1d4","w":0}]},
 {"k":"rn1qkb1r/pp2pppp/2p2n2/5b2/P1pP4/2N2N2/1P2PPPP/R1BQKB1R w KQkq -","n":"Slav Defense: Czech Variation","e":"D17","m":[{"s":"Ne5","u":"f3e5","w":72,"n":"Slav Defense: Czech Variation, Krause Attack","e":"D17"},{"s":"e3","u":"e2e3","w":28,"n":"Slav Defense: Czech Variation, Classical System","e":"D18"},{"s":"Nh4","u":"f3h4","w":0,"n":"Slav Defense: Czech Variation, Bled Attack","e":"D17"}]},
 {"k":"rn1qkb1r/pp2pppp/2p2n2/8/P1pP2b1/2N2N2/1P2PPPP/R1BQKB1R w KQkq -","n":"Slav Defense: Steiner Variation","e":"D16","m":[]},

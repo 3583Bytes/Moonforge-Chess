@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "positions": 7928,
-  "moves": 8108,
-  "named": 3810,
-  "lines": 3810,
+  "positions": 7937,
+  "moves": 8117,
+  "named": 3815,
+  "lines": 3815,
   "shards": 64,
   "shardBy": "FNV-1a 32-bit over the key, modulo shards",
   "key": "first four FEN fields — placement, side, castling, en passant",

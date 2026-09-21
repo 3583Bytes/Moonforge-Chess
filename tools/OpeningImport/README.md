@@ -22,7 +22,13 @@ dotnet run --project tools/OpeningImport -c Release -- \
 Then run the tests — `ChessBin.Web.Tests/OpeningDataTests.cs` replays every committed move
 through the engine and checks the sharding, so a bad import fails CI before it can deploy.
 
-Options: `--book` (default `ChessCoreEngine/Book.cs`), `--shards` (64).
+Then regenerate the static pages too — `tools/OpeningPages` is built on this tool's output:
+
+```bash
+dotnet run --project tools/OpeningPages -c Release -- --out ChessBin.Web/wwwroot
+```
+
+Options: `--book` (default `ChessCoreEngine/Book.cs`), `--shards` (64), `--line-shards` (64).
 
 ## Source and licence
 
@@ -45,8 +51,10 @@ treats popularity as optional (`weight: 0` renders as "rare"), so the same slot 
 ## Output layout
 
 ```
-wwwroot/openings/manifest.json     positions, named, lines, shards, and how sharding works
-wwwroot/openings/shard-000.json    one JSON array per shard, one position per line
+wwwroot/openings/manifest.json          positions, named, lines, shards, and how sharding works
+wwwroot/openings/shard-000.json         one JSON array per shard, one position per line
+wwwroot/openings/lines/manifest.json    lines, shards, and the slug rule
+wwwroot/openings/lines/shard-00.json    one JSON array per shard, one named opening per line
 ```
 
 Positions are keyed by the **first four FEN fields** — placement, side to move, castling,
@@ -70,3 +78,25 @@ name and ECO code of the position it *leads to* — denormalised on purpose, so 
 label the whole list without a second fetch per row.
 
 Moves are ordered most-played first, then by notation, so the UI does not have to sort.
+
+## The line index
+
+`lines/` is a second, smaller output keyed by opening *name* rather than by position: the slug
+its page lives at, the ECO code, the move order in both notations, and the position the line
+ends on. Sharded the same way by `FNV-1a 32-bit(slug) % shards`, so a deep link fetches one
+~17 KB file rather than a 980 KB table.
+
+It exists because the move order an opening is known by **cannot be recovered from the position
+graph**. Transpositions merge move orders there, so the shortest path to a named position is
+frequently not its line — walking the graph reaches *Queen's Gambit Declined* via
+`1.d4 Nf6 2.c4 e6 3.Nf3 d5` rather than `1.d4 d5 2.c4 e6`, and 1,302 of the 3,810 named
+positions have more than one shortest path. The tables' `pgn` column is the only canonical
+answer, and it used to be read and thrown away.
+
+Where a name appears on more than one row the first wins, the same rule the position's name
+follows, and rows are read in ECO order a→e, so the choice is stable across runs. 3,815 rows
+carry 3,174 distinct names, so that is how many entries ship.
+
+Two consumers read it: `ChessBin.Web/Pages/Openings.razor`, which replays a line when someone
+opens `/openings/<slug>`, and `tools/OpeningPages`, which generates that page in the first
+place.

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Build-time generator: turns the committed opening data into the static pages crawlers and
+    link previews read, plus the sitemap that lists them. Deliberately NOT part of
+    ChessCore.sln — it must never run in the Pages/release workflows, and its only job is to
+    produce committed output.
+
+    It reads only what is already in wwwroot, so unlike OpeningImport it needs no network.
+
+    Usage is documented in tools/OpeningPages/README.md.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>OpeningPages</AssemblyName>
+    <RootNamespace>ChessBin.Tools.OpeningPages</RootNamespace>
+  </PropertyGroup>
+
+</Project>

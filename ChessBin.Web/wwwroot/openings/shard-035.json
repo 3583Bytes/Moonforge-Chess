@@ -39,6 +39,7 @@
 {"k":"rn1q1rk1/pp3ppp/2p1pn2/5b2/PbBP4/2N1PN2/1P3PPP/R1BQ1RK1 w - -","m":[{"s":"Qe2","u":"d1e2","w":6,"n":"Slav Defense: Czech Variation, Classical System, Main Line","e":"D19"}]},
 {"k":"rn1qk2r/pbpp1ppp/1p2pn2/8/1bPP4/5NP1/PP1BPPBP/RN1QK2R b KQkq -","m":[{"s":"Be7","u":"b4e7","w":0,"n":"Queen's Indian Defense: Riumin Variation","e":"E16"},{"s":"Bxd2+","u":"b4d2","w":0}]},
 {"k":"rn1qk2r/pbpp1ppp/1p2pn2/8/2PP4/5NP1/PP1QPPBP/RN2K2R b KQkq -","m":[{"s":"O-O","u":"e8g8","w":0}]},
+{"k":"rn1qk2r/pbppbppp/1p2pn2/8/2PP4/5NP1/PP1BPPBP/RN1Q1RK1 b kq -","m":[{"s":"O-O","u":"e8g8","w":0}]},
 {"k":"rn1qk2r/pp3ppp/2p1pn2/5b2/PbBP4/2N1PN2/1P3PPP/R1BQ1RK1 b kq -","n":"Slav Defense: Czech Variation, Dutch Variation","e":"D19","m":[{"s":"O-O","u":"e8g8","w":0}]},
 {"k":"rn1qkb1r/4pp1p/b2p1np1/2pP4/4P3/2N2N2/PP3PPP/R1BQKB1R b KQkq e3","m":[{"s":"Bxf1","u":"a6f1","w":0}]},
 {"k":"rn1qkbnr/ppp2p1p/3p4/6p1/2B1Ppb1/5N2/PPPP2PP/RNBQ1RK1 w kq -","m":[{"s":"h3","u":"h2h3","w":0}]},
